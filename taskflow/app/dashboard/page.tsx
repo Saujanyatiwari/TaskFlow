@@ -6,18 +6,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { useBoards } from "@/lib/hooks/useBoards";
 import { useUser } from "@clerk/nextjs";
-import { Filter, Ghost, Grid3X3, List, Loader2, Plus, Rocket, Search } from "lucide-react";
+import { Filter, Ghost, Grid3X3, List, Loader2, Plus, Rocket, Search, Zap } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { usePlanLimits } from "@/lib/hooks/usePlanLimits";
 
 export default function DashboardPage() {
     const {user} = useUser();
     const {createBoard , boards , loading , error} = useBoards();
     const[viewMode , setViewMode] = useState<"grid" | "list">("grid");
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
-    const handleCreateBoard = async () =>{
-        await createBoard({title:"New Board"});
-    }
+    const { plan, limit, isAtLimit } = usePlanLimits(boards.length);
+
+    const handleCreateBoard = async () => {
+        if (isAtLimit) {
+            setShowUpgradeModal(true);
+            return;
+        }
+        await createBoard({ title: "New Board" });
+    };
 
     if(loading){
         return(
@@ -51,10 +60,19 @@ export default function DashboardPage() {
                     <p className="text-gray-600">
                         Here's what's happening with your boards today.
                     </p>
-                    <Button className="w-full s:w-auto" onClick={handleCreateBoard}>
-                        <Plus className="h-4 w-4 mr-2"/>
-                        Create Board
-                    </Button>
+                    <div className="flex flex-col items-start gap-1">
+                        <Button
+                            className="w-full sm:w-auto"
+                            onClick={handleCreateBoard}
+                            disabled={isAtLimit}
+                        >
+                            <Plus className="h-4 w-4 mr-2"/>
+                            Create Board
+                        </Button>
+                        <p className={`text-xs ${isAtLimit ? "text-red-500 font-medium" : "text-gray-400"}`}>
+                            {boards.length}/{limit} boards used
+                        </p>
+                    </div>
                 </div>
                 {/* Stats * */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8  ">
@@ -160,7 +178,7 @@ export default function DashboardPage() {
                                 Filter
                             </Button>
 
-                            <Button onClick={handleCreateBoard}>
+                            <Button onClick={handleCreateBoard} disabled={isAtLimit}>
                                 <Plus/>
                                 Create Board
                             </Button>
@@ -216,8 +234,11 @@ export default function DashboardPage() {
                             </Link>
                         ))}
 
-                        <Card className="border-2 border-dashed borger-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
-                            <CardContent className="p-4 sm:p-6 flex flex-col items-center justify-center h-full min-h-50">
+                        <Card
+                            onClick={handleCreateBoard}
+                            className="border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group"
+                        >
+                            <CardContent className="p-4 sm:p-6 flex flex-col items-center justify-center h-full min-h-[150px]">
                                 <Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2"/>
                                 <p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">Create new board</p>
                             </CardContent>
@@ -270,6 +291,35 @@ export default function DashboardPage() {
                     )}
                 </div>
             </main>
+
+            {/* Upgrade Modal */}
+            <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
+                <DialogContent className="w-[95vw] max-w-md mx-auto text-center">
+                    <DialogHeader>
+                        <div className="flex justify-center mb-3">
+                            <div className="h-12 w-12 rounded-full bg-yellow-100 flex items-center justify-center">
+                                <Zap className="h-6 w-6 text-yellow-500" />
+                            </div>
+                        </div>
+                        <DialogTitle className="text-xl">Upgrade to Pro</DialogTitle>
+                        <p className="text-sm text-gray-600 mt-1">
+                            You've reached your free plan limit of <strong>{limit} boards</strong>.
+                        </p>
+                        <p className="text-sm text-gray-500 mt-1">
+                            Upgrade to Pro for unlimited boards, advanced filters, and more.
+                        </p>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-2 mt-4">
+                        <Button className="w-full bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-white font-semibold">
+                            <Zap className="h-4 w-4 mr-2" />
+                            Upgrade to Pro
+                        </Button>
+                        <Button variant="ghost" className="w-full" onClick={() => setShowUpgradeModal(false)}>
+                            Maybe Later
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
