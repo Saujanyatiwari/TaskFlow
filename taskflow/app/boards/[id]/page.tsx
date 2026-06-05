@@ -7,14 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBoard } from "@/lib/hooks/useBoards";
 import { useParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { DialogTrigger } from "@radix-ui/react-dialog";
 import { MoreHorizontal, Plus, Search, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ColumnWithTasks } from "@/lib/supabase/models";
-import { title } from "process";
 import { TaskCard, SortableTaskCard } from "@/components/kanban/TaskCard";
 import {
   DndContext,
@@ -196,7 +195,7 @@ function Column({
 
 export default function BoardPage(){
     const { id } = useParams<{id:string}>();
-    const { board, updateBoard, columns, createRealTask, createColumn, updateColumnTitle } = useBoard(id);
+    const { board, updateBoard, columns, loading, error, createRealTask, moveTask, reloadBoard, createColumn, updateColumnTitle } = useBoard(id);
 
     const [localColumns, setLocalColumns] = useState(columns);
     const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -246,37 +245,39 @@ export default function BoardPage(){
       );
       if (!targetCol) return;
 
-      setLocalColumns(prev => {
-        if (sourceCol.id === targetCol.id) {
-          const col = prev.find(c => c.id === sourceCol.id)!;
-          const oldIdx = col.tasks.findIndex(t => t.id === activeId);
-          const newIdx = col.tasks.findIndex(t => t.id === overId);
-          if (oldIdx === newIdx || newIdx === -1) return prev;
-          return prev.map(c =>
-            c.id === col.id ? { ...c, tasks: arrayMove(c.tasks, oldIdx, newIdx) } : c
-          );
-        } else {
-          const task = sourceCol.tasks.find(t => t.id === activeId)!;
-          const overTaskIdx = targetCol.tasks.findIndex(t => t.id === overId);
-          const insertIdx = overTaskIdx >= 0 ? overTaskIdx : targetCol.tasks.length;
-          return prev.map(c => {
-            if (c.id === sourceCol.id) return { ...c, tasks: c.tasks.filter(t => t.id !== activeId) };
-            if (c.id === targetCol.id) {
-              const newTasks = [...c.tasks];
-              newTasks.splice(insertIdx, 0, { ...task, column_id: targetCol.id });
-              return { ...c, tasks: newTasks };
-            }
-            return c;
-          });
-        }
-      });
+      if (sourceCol.id === targetCol.id) {
+        const tasks = sourceCol.tasks;
+        const oldIdx = tasks.findIndex(t => t.id === activeId);
+        const newIdx = tasks.findIndex(t => t.id === overId);
+        if (oldIdx === newIdx || newIdx === -1) return;
+        setLocalColumns(prev => prev.map(c =>
+          c.id === sourceCol.id ? { ...c, tasks: arrayMove([...c.tasks], oldIdx, newIdx) } : c
+        ));
+        moveTask(activeId, sourceCol.id, newIdx).catch(() => reloadBoard());
+      } else {
+        const task = sourceCol.tasks.find(t => t.id === activeId);
+        if (!task) return;
+        const overTaskIdx = targetCol.tasks.findIndex(t => t.id === overId);
+        const insertIdx = overTaskIdx >= 0 ? overTaskIdx : targetCol.tasks.length;
+        setLocalColumns(prev => prev.map(c => {
+          if (c.id === sourceCol.id) return { ...c, tasks: c.tasks.filter(t => t.id !== activeId) };
+          if (c.id === targetCol.id) {
+            const newTasks = [...c.tasks];
+            newTasks.splice(insertIdx, 0, { ...task, column_id: targetCol.id });
+            return { ...c, tasks: newTasks };
+          }
+          return c;
+        }));
+        moveTask(activeId, targetCol.id, insertIdx).catch(() => reloadBoard());
+      }
     }
 
-    const activeTask = activeTaskId
-      ? localColumns.flatMap(c => c.tasks).find(t => t.id === activeTaskId)
-      : null;
+    const activeTask = useMemo(
+      () => activeTaskId ? localColumns.flatMap(c => c.tasks).find(t => t.id === activeTaskId) ?? null : null,
+      [activeTaskId, localColumns]
+    );
 
-    const filteredColumns = localColumns.map(col => ({
+    const filteredColumns = useMemo(() => localColumns.map(col => ({
       ...col,
       tasks: col.tasks.filter(task => {
         if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -286,7 +287,7 @@ export default function BoardPage(){
         if (dateTo && task.due_date && task.due_date > dateTo) return false;
         return true;
       }),
-    }));
+    })), [localColumns, searchQuery, priorityFilter, dateFrom, dateTo]);
 
     const activeFilterCount =
       (searchQuery ? 1 : 0) +
@@ -300,6 +301,38 @@ export default function BoardPage(){
       setDateTo("");
     }
 
+    if (loading) {
+      return (
+        <div className="min-h-screen bg-gray-50">
+          <div className="bg-white border-b h-14 animate-pulse" />
+          <div className="container mx-auto px-4 py-6">
+            <div className="flex gap-6 overflow-x-auto pb-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex-shrink-0 w-80">
+                  <div className="bg-white rounded-lg shadow-sm border p-4 animate-pulse">
+                    <div className="h-4 bg-gray-200 rounded w-24 mb-4" />
+                    {[1, 2, 3].map((j) => (
+                      <div key={j} className="h-20 bg-gray-100 rounded mb-2" />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg font-semibold text-gray-800 mb-1">Failed to load board</p>
+            <p className="text-sm text-gray-500">{error}</p>
+          </div>
+        </div>
+      );
+    }
 
     async function handleUpdateBoard(e: React.FormEvent) {
     e.preventDefault();
@@ -345,28 +378,6 @@ export default function BoardPage(){
         await createRealTask(columnId, taskData);
       }
 
-
-  async function handleCreateTask(e:any) {
-    e.preventDefault();
-
-    const formData = new FormData(e.currentTarget);
-    const taskData = {
-      title: formData.get("title") as string,
-      description: (formData.get("description") as string) || undefined,
-      assignee: (formData.get("assignee") as string) || undefined,
-      dueDate: (formData.get("dueDate") as string) || undefined,
-      priority: (formData.get("priority") as |"low"|"medium"|"high") || "medium",
-    };
-
-    if(taskData.title.trim() && columns[0]){
-      await createTask(columns[0].id, taskData);
-
-      const trigger = document.querySelector('[data-state="open"')as  HTMLElement;
-      if(trigger){
-        trigger.click();
-      }
-    }
-  }
 
     return (
         <div className="min-h-screen bg-gray-50">

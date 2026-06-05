@@ -7,21 +7,43 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBoards } from "@/lib/hooks/useBoards";
 import { useUser } from "@clerk/nextjs";
-import { Filter, Grid3X3, LayoutDashboard, List, Loader2, Plus, Rocket, Search, Zap } from "lucide-react";
+import { Activity, BarChart3, Filter, Grid3X3, LayoutDashboard, List, Loader2, Plus, Rocket, Search, X, Zap } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { usePlanLimits } from "@/lib/hooks/usePlanLimits";
 
 export default function DashboardPage() {
     const {user} = useUser();
     const {createBoard , boards , loading , error} = useBoards();
-    const[viewMode , setViewMode] = useState<"grid" | "list">("grid");
+    const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [isCreateBoardOpen, setIsCreateBoardOpen] = useState(false);
     const [newBoardTitle, setNewBoardTitle] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
+    const [sortBy, setSortBy] = useState<"newest" | "oldest" | "updated" | "az">("newest");
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
 
     const { plan, limit, isAtLimit, isUnlimited } = usePlanLimits(boards.length);
+
+    const filteredBoards = useMemo(() => {
+        let result = [...boards];
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            result = result.filter(
+                (b) =>
+                    b.title.toLowerCase().includes(q) ||
+                    (b.description ?? "").toLowerCase().includes(q)
+            );
+        }
+        switch (sortBy) {
+            case "oldest":  result.sort((a, b) => a.created_at.localeCompare(b.created_at)); break;
+            case "updated": result.sort((a, b) => b.updated_at.localeCompare(a.updated_at)); break;
+            case "az":      result.sort((a, b) => a.title.localeCompare(b.title)); break;
+            default:        result.sort((a, b) => b.created_at.localeCompare(a.created_at)); break;
+        }
+        return result;
+    }, [boards, searchQuery, sortBy]);
 
     const handleCreateBoard = () => {
         if (isAtLimit) {
@@ -94,19 +116,17 @@ export default function DashboardPage() {
                         Here's what's happening with your boards today.
                     </p>
                 </div>
-                {/* Stats * */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8  ">
+                {/* Stats */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
                     <Card>
                         <CardContent className="p-4 sm:p-6">
-                            <div className="display-flex item-center justify-between">
+                            <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs sm:text-sm font-medium text-gray-600">
-                                        Total Boards</p>
-                                    <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                                        {boards.length}</p>
+                                    <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Total Boards</p>
+                                    <p className="text-2xl sm:text-3xl font-bold text-gray-900">{boards.length}</p>
                                 </div>
-                                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                                    <div className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 "></div>
+                                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
+                                    <LayoutDashboard className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
                                 </div>
                             </div>
                         </CardContent>
@@ -114,14 +134,18 @@ export default function DashboardPage() {
 
                     <Card>
                         <CardContent className="p-4 sm:p-6">
-                            <div className="display-flex item-center justify-between">
+                            <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs sm:text-sm font-medium text-gray-600">
-                                        Active Projects</p>
-                                    <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                                        {boards.length}</p>
+                                    <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Active This Week</p>
+                                    <p className="text-2xl sm:text-3xl font-bold text-gray-900">
+                                        {boards.filter((b) => {
+                                            const oneWeekAgo = new Date();
+                                            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+                                            return new Date(b.updated_at) > oneWeekAgo;
+                                        }).length}
+                                    </p>
                                 </div>
-                                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-green-100 rounded-xl flex items-center justify-center shrink-0">
                                     <Rocket className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
                                 </div>
                             </div>
@@ -130,20 +154,15 @@ export default function DashboardPage() {
 
                     <Card>
                         <CardContent className="p-4 sm:p-6">
-                            <div className="display-flex item-center justify-between">
+                            <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs sm:text-sm font-medium text-gray-600">
-                                        Recent Activity</p>
-                                    <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                                        {boards.filter((board) => {
-                                            const updatedAt = new Date(board.updated_at);
-                                            const oneWeekAgo = new Date();
-                                            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-                                            return updatedAt > oneWeekAgo;
-                                        }).length}</p>
+                                    <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Plan Usage</p>
+                                    <p className="text-2xl sm:text-3xl font-bold text-gray-900">
+                                        {isUnlimited ? `${boards.length}/∞` : `${boards.length}/${limit}`}
+                                    </p>
                                 </div>
-                                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                                📊
+                                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-purple-100 rounded-xl flex items-center justify-center shrink-0">
+                                    <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
                                 </div>
                             </div>
                         </CardContent>
@@ -151,21 +170,24 @@ export default function DashboardPage() {
 
                     <Card>
                         <CardContent className="p-4 sm:p-6">
-                            <div className="display-flex item-center justify-between">
+                            <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs sm:text-sm font-medium text-gray-600">
-                                        Total Boards</p>
-                                    <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                                        {boards.length}</p>
+                                    <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Current Plan</p>
+                                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 capitalize">{plan}</p>
                                 </div>
-                                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                                    <div className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 "></div>
+                                <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center shrink-0 ${
+                                    plan === "enterprise" ? "bg-purple-100" : plan === "pro" ? "bg-yellow-100" : "bg-gray-100"
+                                }`}>
+                                    {plan === "enterprise"
+                                        ? <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
+                                        : plan === "pro"
+                                        ? <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500" />
+                                        : <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-gray-500" />
+                                    }
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
-
-                    
                 </div>
 
                 {/* Boards */}
@@ -193,9 +215,10 @@ export default function DashboardPage() {
                                 </Button>
                             </div>
 
-                            <Button variant="outline">
-                                <Filter/>
-                                Filter
+                            <Button variant="outline" onClick={() => setIsFilterOpen(true)} className={sortBy !== "newest" ? "border-blue-400 text-blue-600 bg-blue-50" : ""}>
+                                <Filter className="h-4 w-4 mr-1"/>
+                                Sort
+                                {sortBy !== "newest" && <span className="ml-1 h-2 w-2 rounded-full bg-blue-500 inline-block" />}
                             </Button>
 
                             <div className="flex flex-col items-start gap-1">
@@ -210,13 +233,23 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    {/* Serach Bar * */}
-
+                    {/* Search Bar */}
                     <div className="relative mb-4 sm:mb-6">
-                        <Search className="absolute left-3 top-1/2 transform -translate-1/2 h-4 w-4 text-gray-400"/>
-                        <Input id="search" 
-                        placeholder="Search boards..." 
-                        className="pl-10"/>
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                        <Input
+                            placeholder="Search boards..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10 pr-9"
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery("")}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
                     </div>
 
 
@@ -239,12 +272,20 @@ export default function DashboardPage() {
                                 Create your first board
                             </Button>
                         </div>
+                    ) : filteredBoards.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                            <Search className="h-10 w-10 text-gray-300 mb-3" />
+                            <p className="text-gray-500 font-medium">No boards match your search</p>
+                            <button onClick={() => { setSearchQuery(""); setSortBy("newest"); }} className="text-sm text-blue-500 hover:underline mt-1">
+                                Clear filters
+                            </button>
+                        </div>
                     ) : viewMode === "grid" ? (
 
                         //grid view
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg-grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-                        {boards.map((board ,key) => (
+                        {filteredBoards.map((board, key) => (
                             <Link href={`/boards/${board.id}`} key={key}>
                                 <Card className="hover:shadow-lg transition-shadow cursor-pointer group">
                                     <CardHeader className="pb-3 ">
@@ -288,8 +329,8 @@ export default function DashboardPage() {
                     ) : (
                         //list view
                     <div>
-                        {boards.map((board ,key) => (
-                            <div key={key} className={key > 0 ? "mt-4" :""}>
+                        {filteredBoards.map((board, key) => (
+                            <div key={key} className={key > 0 ? "mt-4" : ""}>
                             <Link href={`/boards/${board.id}`} key={key}>
                                 <Card className="hover:shadow-lg transition-shadow cursor-pointer group">
                                     <CardHeader className="pb-3 ">
@@ -331,6 +372,46 @@ export default function DashboardPage() {
                     )}
                 </div>
             </main>
+
+            {/* Sort / Filter Dialog */}
+            <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                <DialogContent className="w-[95vw] max-w-sm mx-auto">
+                    <DialogHeader>
+                        <DialogTitle>Sort Boards</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-2 mt-1">
+                        {(
+                            [
+                                { value: "newest",  label: "Newest first" },
+                                { value: "oldest",  label: "Oldest first" },
+                                { value: "updated", label: "Recently updated" },
+                                { value: "az",      label: "A → Z" },
+                            ] as const
+                        ).map((opt) => (
+                            <button
+                                key={opt.value}
+                                onClick={() => { setSortBy(opt.value); setIsFilterOpen(false); }}
+                                className={`flex items-center justify-between px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                                    sortBy === opt.value
+                                        ? "border-blue-500 bg-blue-50 text-blue-700"
+                                        : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                                }`}
+                            >
+                                {opt.label}
+                                {sortBy === opt.value && <span className="h-2 w-2 rounded-full bg-blue-500" />}
+                            </button>
+                        ))}
+                    </div>
+                    {sortBy !== "newest" && (
+                        <button
+                            onClick={() => { setSortBy("newest"); setIsFilterOpen(false); }}
+                            className="mt-2 text-xs text-gray-400 hover:text-gray-600 underline text-center w-full"
+                        >
+                            Reset to default
+                        </button>
+                    )}
+                </DialogContent>
+            </Dialog>
 
             {/* Create Board Dialog */}
             <Dialog open={isCreateBoardOpen} onOpenChange={setIsCreateBoardOpen}>
