@@ -9,7 +9,7 @@ import { useBoard } from "@/lib/hooks/useBoards";
 import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { DialogTrigger } from "@radix-ui/react-dialog";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { MoreHorizontal, Plus, Search, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -211,6 +211,11 @@ export default function BoardPage(){
     const [editingColumn, setEditingColumn] = useState<ColumnWithTasks | null>(null);
     const [editColumnTitle, setEditColumnTitle] = useState("");
 
+    const [searchQuery, setSearchQuery] = useState("");
+    const [priorityFilter, setPriorityFilter] = useState<"all" | "low" | "medium" | "high">("all");
+    const [dateFrom, setDateFrom] = useState("");
+    const [dateTo, setDateTo] = useState("");
+
     useEffect(() => {
       setLocalColumns(columns);
     }, [columns]);
@@ -270,6 +275,30 @@ export default function BoardPage(){
     const activeTask = activeTaskId
       ? localColumns.flatMap(c => c.tasks).find(t => t.id === activeTaskId)
       : null;
+
+    const filteredColumns = localColumns.map(col => ({
+      ...col,
+      tasks: col.tasks.filter(task => {
+        if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
+        if ((dateFrom || dateTo) && !task.due_date) return false;
+        if (dateFrom && task.due_date && task.due_date < dateFrom) return false;
+        if (dateTo && task.due_date && task.due_date > dateTo) return false;
+        return true;
+      }),
+    }));
+
+    const activeFilterCount =
+      (searchQuery ? 1 : 0) +
+      (priorityFilter !== "all" ? 1 : 0) +
+      (dateFrom || dateTo ? 1 : 0);
+
+    function clearFilters() {
+      setSearchQuery("");
+      setPriorityFilter("all");
+      setDateFrom("");
+      setDateTo("");
+    }
 
 
     async function handleUpdateBoard(e: React.FormEvent) {
@@ -348,7 +377,7 @@ export default function BoardPage(){
                 setIsEditingTitle(true);
             }}
             onFilterClick={() => setIsFilterOpen(true)}
-            filterCount={2}
+            filterCount={activeFilterCount}
             />
 
            <Dialog open={isEditingTitle} onOpenChange={setIsEditingTitle}>
@@ -414,64 +443,59 @@ export default function BoardPage(){
         </Dialog>
 
         <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-          <DialogContent className="w-[95vw] max-w-106.25 mx-auto">
+          <DialogContent className="w-[95vw] max-w-md mx-auto">
             <DialogHeader>
               <DialogTitle>Filter Tasks</DialogTitle>
-              <p className="text-sm text-gray-600">
-                Filter tasks by priority, assignee, or due date
-              </p>
+              <p className="text-sm text-gray-600">Filters apply instantly across all columns</p>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="space-y-2">
                 <Label>Priority</Label>
-                <div className="flex flex-wrap gap-2">
-                  {["low", "medium", "high"].map((priority, key) => (
+                <div className="flex gap-2">
+                  {(["all", "low", "medium", "high"] as const).map((p) => (
                     <Button
-                      // onClick={() => {
-                      //   const newPriorities = filters.priority.includes(
-                      //     priority
-                      //   )
-                      //     ? filters.priority.filter((p) => p !== priority)
-                      //     : [...filters.priority, priority];
-
-                      //   handleFilterChange("priority", newPriorities);
-                      // }}
-                      key={key}
-                      // variant={
-                      //   filters.priority.includes(priority)
-                      //     ? "default"
-                      //     : "outline"
-                      // }
-                      variant="outline"
+                      key={p}
+                      type="button"
                       size="sm"
+                      variant={priorityFilter === p ? "default" : "outline"}
+                      onClick={() => setPriorityFilter(p)}
+                      className="capitalize"
                     >
-                      {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                      {p === "all" ? "All" : p.charAt(0).toUpperCase() + p.slice(1)}
                     </Button>
                   ))}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Due Date</Label>
-                <Input
-                  type="date"
-                  // value={filters.dueDate || ""}
-                  // onChange={(e) =>
-                  //   handleFilterChange("dueDate", e.target.value || null)
-                  // }
-                />
+                <Label>Due Date Range</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="flex-1"
+                  />
+                  <span className="text-gray-400 text-sm shrink-0">to</span>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="flex-1"
+                  />
+                </div>
               </div>
 
-              <div className="flex justify-between pt-4">
+              <div className="flex justify-between pt-2">
                 <Button
                   type="button"
-                  variant={"outline"}
-                  // onClick={clearFilters}
+                  variant="outline"
+                  onClick={() => { clearFilters(); setIsFilterOpen(false); }}
                 >
                   Clear Filters
                 </Button>
                 <Button type="button" onClick={() => setIsFilterOpen(false)}>
-                  Apply Filters
+                  Done
                 </Button>
               </div>
             </div>
@@ -537,6 +561,47 @@ export default function BoardPage(){
 
         {/* Board Content */}
         <main className="container mx-auto px-2 sm:px-4 py-4 sm:py-6">
+          {/* Search bar */}
+          <div className="mb-4 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <Input
+              placeholder="Search tasks…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-9"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Active filter chips */}
+          {activeFilterCount > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <span className="text-xs text-gray-500">{activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""} active</span>
+              {priorityFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                  Priority: {priorityFilter}
+                  <button onClick={() => setPriorityFilter("all")}><X className="h-3 w-3" /></button>
+                </span>
+              )}
+              {(dateFrom || dateTo) && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                  Date range
+                  <button onClick={() => { setDateFrom(""); setDateTo(""); }}><X className="h-3 w-3" /></button>
+                </span>
+              )}
+              <button onClick={clearFilters} className="text-xs text-gray-500 underline hover:text-gray-700">
+                Clear all
+              </button>
+            </div>
+          )}
+
           {/* Stats */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 space-y-4 sm:space-y-0">
             <div className="flex flex-wrap items-center gap-4 sm:gap-6">
@@ -635,7 +700,7 @@ export default function BoardPage(){
             lg:[&::-webkit-scrollbar-thumb]:bg-gray-300 lg:[&::-webkit-scrollbar-thumb]:rounded-full
             space-y-4 lg:space-y-0"
             >
-              {localColumns.map((column) => (
+              {filteredColumns.map((column) => (
                 <Column
                   key={column.id}
                   column={column}
@@ -647,9 +712,13 @@ export default function BoardPage(){
                   }}
                 >
                   <div>
-                    {column.tasks.map((task) => (
-                      <SortableTaskCard key={task.id} task={task} />
-                    ))}
+                    {column.tasks.length === 0 && activeFilterCount > 0 ? (
+                      <p className="text-xs text-gray-400 text-center py-6">No tasks found</p>
+                    ) : (
+                      column.tasks.map((task) => (
+                        <SortableTaskCard key={task.id} task={task} />
+                      ))
+                    )}
                   </div>
                 </Column>
               ))}
