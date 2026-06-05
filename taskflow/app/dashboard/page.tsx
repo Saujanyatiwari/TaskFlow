@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useBoards } from "@/lib/hooks/useBoards";
 import { useUser } from "@clerk/nextjs";
 import { Filter, Ghost, Grid3X3, List, Loader2, Plus, Rocket, Search, Zap } from "lucide-react";
@@ -17,15 +18,26 @@ export default function DashboardPage() {
     const {createBoard , boards , loading , error} = useBoards();
     const[viewMode , setViewMode] = useState<"grid" | "list">("grid");
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [isCreateBoardOpen, setIsCreateBoardOpen] = useState(false);
+    const [newBoardTitle, setNewBoardTitle] = useState("");
 
     const { plan, limit, isAtLimit } = usePlanLimits(boards.length);
 
-    const handleCreateBoard = async () => {
+    const handleCreateBoard = () => {
         if (isAtLimit) {
             setShowUpgradeModal(true);
             return;
         }
-        await createBoard({ title: "New Board" });
+        setNewBoardTitle("");
+        setIsCreateBoardOpen(true);
+    };
+
+    const handleSubmitCreateBoard = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newBoardTitle.trim()) return;
+        await createBoard({ title: newBoardTitle.trim() });
+        setNewBoardTitle("");
+        setIsCreateBoardOpen(false);
     };
 
     if(loading){
@@ -60,19 +72,6 @@ export default function DashboardPage() {
                     <p className="text-gray-600">
                         Here's what's happening with your boards today.
                     </p>
-                    <div className="flex flex-col items-start gap-1">
-                        <Button
-                            className="w-full sm:w-auto"
-                            onClick={handleCreateBoard}
-                            disabled={isAtLimit}
-                        >
-                            <Plus className="h-4 w-4 mr-2"/>
-                            Create Board
-                        </Button>
-                        <p className={`text-xs ${isAtLimit ? "text-red-500 font-medium" : "text-gray-400"}`}>
-                            {boards.length}/{limit} boards used
-                        </p>
-                    </div>
                 </div>
                 {/* Stats * */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8  ">
@@ -159,8 +158,8 @@ export default function DashboardPage() {
                                 Manage your projects and tasks</p>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0">
-                            <div className="flex items-center space-x-2 bg-white border p-1">
+                        <div className="flex flex-col sm:flex-row items-start gap-2 sm:gap-3">
+                            <div className="flex items-center gap-1 bg-white border rounded-md p-1">
                                 <Button variant={viewMode === "grid" ? "default" : "ghost"}
                                 size="sm"
                                 onClick={() => setViewMode("grid")}>
@@ -173,15 +172,20 @@ export default function DashboardPage() {
                                 </Button>
                             </div>
 
-                            <Button variant="outline" size="sm" >
+                            <Button variant="outline">
                                 <Filter/>
                                 Filter
                             </Button>
 
-                            <Button onClick={handleCreateBoard} disabled={isAtLimit}>
-                                <Plus/>
-                                Create Board
-                            </Button>
+                            <div className="flex flex-col items-start gap-1">
+                                <Button onClick={handleCreateBoard}>
+                                    <Plus/>
+                                    Create Board
+                                </Button>
+                                <p className={`text-xs ${isAtLimit ? "text-rose-600 font-medium" : "text-gray-400"}`}>
+                                    {boards.length}/{limit} boards used
+                                </p>
+                            </div>
                         </div>
                     </div>
 
@@ -280,7 +284,7 @@ export default function DashboardPage() {
                             </div>
                         ))}
 
-                        <Card className="mt-4 border-2 border-dashed borger-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
+                        <Card onClick={handleCreateBoard} className="mt-4 border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
                             <CardContent className="p-4 sm:p-6 flex flex-col items-center justify-center h-full min-h-[200px]">
                                 <Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2"/>
                                 <p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">Create new board</p>
@@ -291,6 +295,35 @@ export default function DashboardPage() {
                     )}
                 </div>
             </main>
+
+            {/* Create Board Dialog */}
+            <Dialog open={isCreateBoardOpen} onOpenChange={setIsCreateBoardOpen}>
+                <DialogContent className="w-[95vw] max-w-sm mx-auto">
+                    <DialogHeader>
+                        <DialogTitle>New Board</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleSubmitCreateBoard} className="flex flex-col gap-4 mt-2">
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="board-title">Board name</Label>
+                            <Input
+                                id="board-title"
+                                placeholder="e.g. Marketing Sprint"
+                                value={newBoardTitle}
+                                onChange={(e) => setNewBoardTitle(e.target.value)}
+                                autoFocus
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button type="button" variant="ghost" onClick={() => setIsCreateBoardOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={!newBoardTitle.trim()}>
+                                Create Board
+                            </Button>
+                        </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
 
             {/* Upgrade Modal */}
             <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
@@ -310,10 +343,12 @@ export default function DashboardPage() {
                         </p>
                     </DialogHeader>
                     <div className="flex flex-col gap-2 mt-4">
-                        <Button className="w-full bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-white font-semibold">
-                            <Zap className="h-4 w-4 mr-2" />
-                            Upgrade to Pro
-                        </Button>
+                        <Link href="/pricing">
+                            <Button className="w-full bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-white font-semibold">
+                                <Zap className="h-4 w-4 mr-2" />
+                                View Plans
+                            </Button>
+                        </Link>
                         <Button variant="ghost" className="w-full" onClick={() => setShowUpgradeModal(false)}>
                             Maybe Later
                         </Button>
