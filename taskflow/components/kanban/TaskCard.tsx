@@ -1,5 +1,7 @@
 import { Task } from "@/lib/supabase/models";
 import { Card, CardContent } from "@/components/ui/card";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const priorityDotColor: Record<Task["priority"], string> = {
   low: "bg-green-500",
@@ -20,7 +22,7 @@ interface TaskCardProps {
 
 export function TaskCard({ task }: TaskCardProps) {
   return (
-    <Card className="mb-2 transition-all hover:-translate-y-0.5 hover:shadow-md cursor-pointer">
+    <Card className="mb-2 transition-shadow hover:shadow-md">
       <CardContent className="p-3">
         <div className="flex items-start gap-2 mb-1">
           <span
@@ -47,5 +49,32 @@ export function TaskCard({ task }: TaskCardProps) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+export function SortableTaskCard({ task }: TaskCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+      }}
+      className="cursor-grab active:cursor-grabbing"
+      {...attributes}
+      {...listeners}
+    >
+      <TaskCard task={task} />
+    </div>
   );
 }

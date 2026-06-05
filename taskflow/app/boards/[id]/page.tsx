@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBoard } from "@/lib/hooks/useBoards";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DialogTrigger } from "@radix-ui/react-dialog";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,26 +15,48 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ColumnWithTasks } from "@/lib/supabase/models";
 import { title } from "process";
-import { TaskCard } from "@/components/kanban/TaskCard";
+import { TaskCard, SortableTaskCard } from "@/components/kanban/TaskCard";
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  closestCenter,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 
 
 
 function Column({
   column,
   children,
+  taskIds,
   onCreateTask,
   onEditColumn,
 }: {
   column: ColumnWithTasks;
   children: React.ReactNode;
-  onCreateTask: (taskData: any) => Promise<void>;
+  taskIds: string[];
+  onCreateTask: (columnId: string, taskData: any) => Promise<void>;
   onEditColumn: (column: ColumnWithTasks) => void;
 }) {
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   return (
     <div className="w-full lg:shrink-0 lg:w-80">
-      <div className="bg=wgite rounded-lg shadow-sm border">
+      <div className="bg-white rounded-lg shadow-sm border">
 
         {/* Column Header */}
         <div className="p-3 sm:p-4 border-b">
@@ -60,7 +82,14 @@ function Column({
 
         {/* column content */}
         <div className="p-2">
-          {children}
+          <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+            <div
+              ref={setNodeRef}
+              className={`min-h-[2px] rounded transition-colors ${isOver ? "bg-blue-50" : ""}`}
+            >
+              {children}
+            </div>
+          </SortableContext>
           <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
               <Button
                 variant="ghost"
@@ -80,25 +109,27 @@ function Column({
                 className="space-y-4"
                 onSubmit={async (e) => {
                   e.preventDefault();
-
-                  const formData = new FormData(e.currentTarget);
-
-                  await onCreateTask({
-                    title: formData.get("title") as string,
-                    description:
-                      (formData.get("description") as string) || undefined,
-                    assignee:
-                      (formData.get("assignee") as string) || undefined,
-                    dueDate:
-                      (formData.get("dueDate") as string) || undefined,
-                    priority:
-                      (formData.get("priority") as
-                        | "low"
-                        | "medium"
-                        | "high") || "medium",
-                  });
-
-                  setIsAddTaskOpen(false);
+                  setIsSaving(true);
+                  try {
+                    const formData = new FormData(e.currentTarget);
+                    await onCreateTask(column.id, {
+                      title: formData.get("title") as string,
+                      description:
+                        (formData.get("description") as string) || undefined,
+                      assignee:
+                        (formData.get("assignee") as string) || undefined,
+                      dueDate:
+                        (formData.get("dueDate") as string) || undefined,
+                      priority:
+                        (formData.get("priority") as
+                          | "low"
+                          | "medium"
+                          | "high") || "medium",
+                    });
+                    setIsAddTaskOpen(false);
+                  } finally {
+                    setIsSaving(false);
+                  }
                 }}
               >
                 <div className="space-y-2">
@@ -149,7 +180,9 @@ function Column({
                 </div>
 
                 <div className="flex justify-end space-x-2 pt-4">
-                  <Button type="submit">Create Task</Button>
+                  <Button type="submit" disabled={isSaving}>
+                    {isSaving ? "Saving..." : "Create Task"}
+                  </Button>
                 </div>
               </form>
             </DialogContent>
@@ -165,11 +198,74 @@ export default function BoardPage(){
     const { id } = useParams<{id:string}>();
     const {board , updateBoard , columns , createRealTask} = useBoard(id);
 
+    const [localColumns, setLocalColumns] = useState(columns);
+    const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+
     const [isEditingTitle , setIsEditingTitle] = useState(false);
     const [newTitle , setNewTitle] = useState("");
     const [newColor , setNewColor] = useState("");
 
     const [isFilterOpen , setIsFilterOpen] = useState(false);
+
+    useEffect(() => {
+      setLocalColumns(columns);
+    }, [columns]);
+
+    const sensors = useSensors(
+      useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+      useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    );
+
+    function handleDragStart(event: DragStartEvent) {
+      setActiveTaskId(event.active.id as string);
+    }
+
+    function handleDragEnd(event: DragEndEvent) {
+      const { active, over } = event;
+      setActiveTaskId(null);
+
+      if (!over || active.id === over.id) return;
+
+      const activeId = active.id as string;
+      const overId = over.id as string;
+
+      const sourceCol = localColumns.find(col => col.tasks.some(t => t.id === activeId));
+      if (!sourceCol) return;
+
+      const targetCol = localColumns.find(col =>
+        col.id === overId || col.tasks.some(t => t.id === overId)
+      );
+      if (!targetCol) return;
+
+      setLocalColumns(prev => {
+        if (sourceCol.id === targetCol.id) {
+          const col = prev.find(c => c.id === sourceCol.id)!;
+          const oldIdx = col.tasks.findIndex(t => t.id === activeId);
+          const newIdx = col.tasks.findIndex(t => t.id === overId);
+          if (oldIdx === newIdx || newIdx === -1) return prev;
+          return prev.map(c =>
+            c.id === col.id ? { ...c, tasks: arrayMove(c.tasks, oldIdx, newIdx) } : c
+          );
+        } else {
+          const task = sourceCol.tasks.find(t => t.id === activeId)!;
+          const overTaskIdx = targetCol.tasks.findIndex(t => t.id === overId);
+          const insertIdx = overTaskIdx >= 0 ? overTaskIdx : targetCol.tasks.length;
+          return prev.map(c => {
+            if (c.id === sourceCol.id) return { ...c, tasks: c.tasks.filter(t => t.id !== activeId) };
+            if (c.id === targetCol.id) {
+              const newTasks = [...c.tasks];
+              newTasks.splice(insertIdx, 0, { ...task, column_id: targetCol.id });
+              return { ...c, tasks: newTasks };
+            }
+            return c;
+          });
+        }
+      });
+    }
+
+    const activeTask = activeTaskId
+      ? localColumns.flatMap(c => c.tasks).find(t => t.id === activeTaskId)
+      : null;
 
 
     async function handleUpdateBoard(e: React.FormEvent) {
@@ -188,20 +284,17 @@ export default function BoardPage(){
       }
 
 
-      async function createTask(taskData: {
-        title: string;
-        description?: string;
-        assignee?: string;
-        dueDate?: string;
-        priority: "low" | "medium" | "high";
-      }){
-        const targetColumn = columns[0];
-        if(!targetColumn){
-          throw new Error("No columns available to add task");
+      async function createTask(
+        columnId: string,
+        taskData: {
+          title: string;
+          description?: string;
+          assignee?: string;
+          dueDate?: string;
+          priority: "low" | "medium" | "high";
         }
-          
-
-        await createRealTask(targetColumn.id , taskData);
+      ) {
+        await createRealTask(columnId, taskData);
       }
 
 
@@ -217,8 +310,8 @@ export default function BoardPage(){
       priority: (formData.get("priority") as |"low"|"medium"|"high") || "medium",
     };
 
-    if(taskData.title.trim()){
-      await createTask(taskData);
+    if(taskData.title.trim() && columns[0]){
+      await createTask(columns[0].id, taskData);
 
       const trigger = document.querySelector('[data-state="open"')as  HTMLElement;
       if(trigger){
@@ -374,7 +467,7 @@ export default function BoardPage(){
             <div className="flex flex-wrap items-center gap-4 sm:gap-6">
               <div className="text-sm text-gray-600">
                 <span className="font-medium">Total Tasks: </span>
-                {columns.reduce((sum, col) => sum + col.tasks.length, 0)}
+                {localColumns.reduce((sum, col) => sum + col.tasks.length, 0)}
               </div>
             </div>
 
@@ -454,29 +547,39 @@ export default function BoardPage(){
           </div>
 
           {/* Board Columns */}
-
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
             <div
-              className="flex flex-col lg:flex-row lg:space-x-6 lg:overflow-x-auto 
-            lg:pb-6 lg:px-2 lg:-mx-2 lg:[&::-webkit-scrollbar]:h-2 
-            lg:[&::-webkit-scrollbar-track]:bg-gray-100 
-            lg:[&::-webkit-scrollbar-thumb]:bg-gray-300 lg:[&::-webkit-scrollbar-thumb]:rounded-full 
+              className="flex flex-col lg:flex-row lg:space-x-6 lg:overflow-x-auto
+            lg:pb-6 lg:px-2 lg:-mx-2 lg:[&::-webkit-scrollbar]:h-2
+            lg:[&::-webkit-scrollbar-track]:bg-gray-100
+            lg:[&::-webkit-scrollbar-thumb]:bg-gray-300 lg:[&::-webkit-scrollbar-thumb]:rounded-full
             space-y-4 lg:space-y-0"
             >
-              {columns.map((column, key) => (
+              {localColumns.map((column) => (
                 <Column
-                  key={key}
+                  key={column.id}
                   column={column}
+                  taskIds={column.tasks.map(t => t.id)}
                   onCreateTask={createTask}
                   onEditColumn={() => {}}
                 >
                   <div>
                     {column.tasks.map((task) => (
-                      <TaskCard key={task.id} task={task} />
+                      <SortableTaskCard key={task.id} task={task} />
                     ))}
                   </div>
-                  </Column>
+                </Column>
               ))}
             </div>
+            <DragOverlay>
+              {activeTask ? <TaskCard task={activeTask} /> : null}
+            </DragOverlay>
+          </DndContext>
           </main>
 
         </div>
