@@ -7,11 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBoards } from "@/lib/hooks/useBoards";
 import { useUser } from "@clerk/nextjs";
-import { Activity, BarChart3, Filter, Grid3X3, LayoutDashboard, List, Loader2, Plus, Rocket, Search, X, Zap } from "lucide-react";
+import { Activity, BarChart3, Bot, Download, Filter, Grid3X3, LayoutDashboard, List, Loader2, Plus, Rocket, Search, X, Zap } from "lucide-react";
 import Link from "next/link";
 import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { usePlanLimits } from "@/lib/hooks/usePlanLimits";
+import { useFeatureAccess } from "@/lib/hooks/useFeatureAccess";
+import { FeatureName } from "@/lib/config/featureMatrix";
+import { LockedButton, LockedFeatureCard, FeatureUpgradeModal } from "@/components/feature-gate";
 
 export default function DashboardPage() {
     const {user} = useUser();
@@ -23,6 +26,9 @@ export default function DashboardPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [sortBy, setSortBy] = useState<"newest" | "oldest" | "updated" | "az">("newest");
     const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [lockedFeature, setLockedFeature] = useState<FeatureName | null>(null);
+
+    const { isAllowed } = useFeatureAccess();
 
     const { plan, limit, isAtLimit, isUnlimited } = usePlanLimits(boards.length);
 
@@ -221,6 +227,19 @@ export default function DashboardPage() {
                                 {sortBy !== "newest" && <span className="ml-1 h-2 w-2 rounded-full bg-blue-500 inline-block" />}
                             </Button>
 
+                            {isAllowed("export") ? (
+                                <Button variant="outline">
+                                    <Download className="h-4 w-4 mr-1" />
+                                    Export
+                                </Button>
+                            ) : (
+                                <LockedButton
+                                    label="Export"
+                                    requiredPlan="Pro"
+                                    onClick={() => setLockedFeature("export")}
+                                />
+                            )}
+
                             <div className="flex flex-col items-start gap-1">
                                 <Button onClick={handleCreateBoard}>
                                     <Plus/>
@@ -371,6 +390,47 @@ export default function DashboardPage() {
 
                     )}
                 </div>
+
+                {/* Locked Pro/Enterprise feature hints */}
+                {(!isAllowed("analytics") || !isAllowed("aiFeatures")) && (
+                    <div className="mb-8">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-base font-semibold text-gray-800">Unlock more features</h3>
+                                <p className="text-sm text-gray-400 mt-0.5">Upgrade your plan to access powerful tools</p>
+                            </div>
+                            <Link href="/pricing" className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors">
+                                View plans →
+                            </Link>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {!isAllowed("analytics") && (
+                                <LockedFeatureCard
+                                    feature="analytics"
+                                    icon={<BarChart3 className="h-4 w-4" />}
+                                    description="Track board activity and task trends"
+                                    onUnlock={setLockedFeature}
+                                />
+                            )}
+                            {!isAllowed("export") && (
+                                <LockedFeatureCard
+                                    feature="export"
+                                    icon={<Download className="h-4 w-4" />}
+                                    description="Export your boards and tasks to CSV"
+                                    onUnlock={setLockedFeature}
+                                />
+                            )}
+                            {!isAllowed("aiFeatures") && (
+                                <LockedFeatureCard
+                                    feature="aiFeatures"
+                                    icon={<Bot className="h-4 w-4" />}
+                                    description="AI-powered task suggestions and summaries"
+                                    onUnlock={setLockedFeature}
+                                />
+                            )}
+                        </div>
+                    </div>
+                )}
             </main>
 
             {/* Sort / Filter Dialog */}
@@ -483,6 +543,7 @@ export default function DashboardPage() {
                     </div>
                 </DialogContent>
             </Dialog>
+            <FeatureUpgradeModal feature={lockedFeature} onClose={() => setLockedFeature(null)} />
         </div>
     )
 }

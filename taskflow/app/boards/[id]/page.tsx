@@ -9,12 +9,15 @@ import { useBoard } from "@/lib/hooks/useBoards";
 import { useParams } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
 import { DialogTrigger } from "@radix-ui/react-dialog";
-import { MoreHorizontal, Plus, Search, X } from "lucide-react";
+import { Download, MoreHorizontal, Plus, Search, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ColumnWithTasks } from "@/lib/supabase/models";
 import { TaskCard, SortableTaskCard } from "@/components/kanban/TaskCard";
+import { useFeatureAccess } from "@/lib/hooks/useFeatureAccess";
+import { FeatureName } from "@/lib/config/featureMatrix";
+import { LockedButton, FeatureUpgradeModal } from "@/components/feature-gate";
 import {
   DndContext,
   DragEndEvent,
@@ -209,6 +212,9 @@ export default function BoardPage(){
     const [newColumnTitle, setNewColumnTitle] = useState("");
     const [editingColumn, setEditingColumn] = useState<ColumnWithTasks | null>(null);
     const [editColumnTitle, setEditColumnTitle] = useState("");
+    const [lockedFeature, setLockedFeature] = useState<FeatureName | null>(null);
+
+    const { isAllowed } = useFeatureAccess();
 
     const [searchQuery, setSearchQuery] = useState("");
     const [priorityFilter, setPriorityFilter] = useState<"all" | "low" | "medium" | "high">("all");
@@ -622,6 +628,22 @@ export default function BoardPage(){
               </div>
             </div>
 
+            <div className="flex items-center gap-2">
+              {/* Export button */}
+              {isAllowed("export") ? (
+                <Button variant="outline" size="sm">
+                  <Download className="h-4 w-4 mr-1" />
+                  Export
+                </Button>
+              ) : (
+                <LockedButton
+                  label="Export"
+                  requiredPlan="Pro"
+                  size="sm"
+                  onClick={() => setLockedFeature("export")}
+                />
+              )}
+
             {/* Add task dialog */}
             <Dialog>
               <DialogTrigger asChild>
@@ -695,6 +717,7 @@ export default function BoardPage(){
                 </form>
               </DialogContent>
             </Dialog>
+            </div>{/* end toolbar flex */}
           </div>
 
           {/* Board Columns */}
@@ -751,6 +774,7 @@ export default function BoardPage(){
           </DndContext>
           </main>
 
+          <FeatureUpgradeModal feature={lockedFeature} onClose={() => setLockedFeature(null)} />
         </div>
       );
     }
