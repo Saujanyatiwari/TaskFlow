@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ColumnWithTasks } from "@/lib/supabase/models";
 import { title } from "process";
+import { TaskCard } from "@/components/kanban/TaskCard";
 
 
 
@@ -29,19 +30,12 @@ function Column({
   onCreateTask: (taskData: any) => Promise<void>;
   onEditColumn: (column: ColumnWithTasks) => void;
 }) {
-  // const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
+
   return (
-    <div className="w-full lg:shrink-0 lg:w-80"
-      // ref={setNodeRef}
-      // className={`w-full lg:shrink-0 lg:w-80 ${
-      //   isOver ? "bg-blue-50 rounded-lg" : ""
-      // }`}
-    >
-      <div className="bg=wgite rounded-lg shadow-sm border"
-        // className={`bg-white rounded-lg shadow-sm border ${
-        //   isOver ? "ring-2 ring-blue-300" : ""
-        // }`}
-      >
+    <div className="w-full lg:shrink-0 lg:w-80">
+      <div className="bg=wgite rounded-lg shadow-sm border">
+
         {/* Column Header */}
         <div className="p-3 sm:p-4 border-b">
           <div className="flex items-center justify-between">
@@ -67,46 +61,46 @@ function Column({
         {/* column content */}
         <div className="p-2">
           {children}
-          <Dialog>
-            <DialogTrigger asChild>
+          <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
               <Button
                 variant="ghost"
                 className="w-full mt-3 text-gray-500 hover:text-gray-700"
+                onClick={() => setIsAddTaskOpen(true)}
               >
                 <Plus />
                 Add Task
               </Button>
-            </DialogTrigger>
             <DialogContent className="w-[95vw] max-w-106.25 mx-auto">
               <DialogHeader>
                 <DialogTitle>Create New Task</DialogTitle>
                 <p className="text-sm text-gray-600">Add a task to the board</p>
               </DialogHeader>
 
-              {/* <form className="space-y-4" onSubmit={onCreateTask}> */}
               <form
-  className="space-y-4"
-  onSubmit={(e) => {
-    e.preventDefault();
+                className="space-y-4"
+                onSubmit={async (e) => {
+                  e.preventDefault();
 
-    const formData = new FormData(e.currentTarget);
+                  const formData = new FormData(e.currentTarget);
 
-    onCreateTask({
-      title: formData.get("title") as string,
-      description:
-        (formData.get("description") as string) || undefined,
-      assignee:
-        (formData.get("assignee") as string) || undefined,
-      dueDate:
-        (formData.get("dueDate") as string) || undefined,
-      priority:
-        (formData.get("priority") as
-          | "low"
-          | "medium"
-          | "high") || "medium",
-    });
-  }}
->
+                  await onCreateTask({
+                    title: formData.get("title") as string,
+                    description:
+                      (formData.get("description") as string) || undefined,
+                    assignee:
+                      (formData.get("assignee") as string) || undefined,
+                    dueDate:
+                      (formData.get("dueDate") as string) || undefined,
+                    priority:
+                      (formData.get("priority") as
+                        | "low"
+                        | "medium"
+                        | "high") || "medium",
+                  });
+
+                  setIsAddTaskOpen(false);
+                }}
+              >
                 <div className="space-y-2">
                   <Label>Title *</Label>
                   <Input
@@ -476,8 +470,8 @@ export default function BoardPage(){
                   onEditColumn={() => {}}
                 >
                   <div>
-                    {column.tasks.map((task, key) => (
-                      <div key={key}>{task.title}</div>
+                    {column.tasks.map((task) => (
+                      <TaskCard key={task.id} task={task} />
                     ))}
                   </div>
                   </Column>
