@@ -196,7 +196,7 @@ function Column({
 
 export default function BoardPage(){
     const { id } = useParams<{id:string}>();
-    const {board , updateBoard , columns , createRealTask} = useBoard(id);
+    const { board, updateBoard, columns, createRealTask, createColumn, updateColumnTitle } = useBoard(id);
 
     const [localColumns, setLocalColumns] = useState(columns);
     const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -205,7 +205,11 @@ export default function BoardPage(){
     const [newTitle , setNewTitle] = useState("");
     const [newColor , setNewColor] = useState("");
 
-    const [isFilterOpen , setIsFilterOpen] = useState(false);
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [isAddColumnOpen, setIsAddColumnOpen] = useState(false);
+    const [newColumnTitle, setNewColumnTitle] = useState("");
+    const [editingColumn, setEditingColumn] = useState<ColumnWithTasks | null>(null);
+    const [editColumnTitle, setEditColumnTitle] = useState("");
 
     useEffect(() => {
       setLocalColumns(columns);
@@ -283,6 +287,21 @@ export default function BoardPage(){
         } catch {}
       }
 
+
+      async function handleCreateColumn(e: React.FormEvent) {
+        e.preventDefault();
+        if (!newColumnTitle.trim()) return;
+        await createColumn(newColumnTitle.trim());
+        setNewColumnTitle("");
+        setIsAddColumnOpen(false);
+      }
+
+      async function handleUpdateColumnTitle(e: React.FormEvent) {
+        e.preventDefault();
+        if (!editingColumn || !editColumnTitle.trim()) return;
+        await updateColumnTitle(editingColumn.id, editColumnTitle.trim());
+        setEditingColumn(null);
+      }
 
       async function createTask(
         columnId: string,
@@ -460,6 +479,62 @@ export default function BoardPage(){
         </Dialog>
 
 
+        {/* Edit Column Dialog */}
+        <Dialog open={!!editingColumn} onOpenChange={(open) => { if (!open) setEditingColumn(null); }}>
+          <DialogContent className="w-[95vw] max-w-md mx-auto">
+            <DialogHeader>
+              <DialogTitle>Rename Column</DialogTitle>
+            </DialogHeader>
+            <form className="space-y-4" onSubmit={handleUpdateColumnTitle}>
+              <div className="space-y-2">
+                <Label htmlFor="editColumnTitle">Column Title</Label>
+                <Input
+                  id="editColumnTitle"
+                  value={editColumnTitle}
+                  onChange={(e) => setEditColumnTitle(e.target.value)}
+                  placeholder="Enter column title..."
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button type="button" variant="outline" onClick={() => setEditingColumn(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit">Save</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Column Dialog */}
+        <Dialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen}>
+          <DialogContent className="w-[95vw] max-w-md mx-auto">
+            <DialogHeader>
+              <DialogTitle>Add Column</DialogTitle>
+            </DialogHeader>
+            <form className="space-y-4" onSubmit={handleCreateColumn}>
+              <div className="space-y-2">
+                <Label htmlFor="newColumnTitle">Column Title</Label>
+                <Input
+                  id="newColumnTitle"
+                  value={newColumnTitle}
+                  onChange={(e) => setNewColumnTitle(e.target.value)}
+                  placeholder="e.g. Backlog"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button type="button" variant="outline" onClick={() => setIsAddColumnOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">Add Column</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         {/* Board Content */}
         <main className="container mx-auto px-2 sm:px-4 py-4 sm:py-6">
           {/* Stats */}
@@ -566,7 +641,10 @@ export default function BoardPage(){
                   column={column}
                   taskIds={column.tasks.map(t => t.id)}
                   onCreateTask={createTask}
-                  onEditColumn={() => {}}
+                  onEditColumn={(col) => {
+                    setEditingColumn(col);
+                    setEditColumnTitle(col.title);
+                  }}
                 >
                   <div>
                     {column.tasks.map((task) => (
@@ -575,6 +653,17 @@ export default function BoardPage(){
                   </div>
                 </Column>
               ))}
+
+              {/* Add Column button */}
+              <div className="w-full lg:shrink-0 lg:w-80">
+                <button
+                  onClick={() => setIsAddColumnOpen(true)}
+                  className="w-full h-12 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-600 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Column
+                </button>
+              </div>
             </div>
             <DragOverlay>
               {activeTask ? <TaskCard task={activeTask} /> : null}

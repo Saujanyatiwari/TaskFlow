@@ -1,7 +1,7 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import { boardDataService, boardService, taskService } from "../services";
+import { boardDataService, boardService, columnService, taskService } from "../services";
 import { useEffect, useState } from "react";
 import { Board, Column, Task } from "../supabase/models";
 import { useSupabase } from "../supabase/SupabaseProvider";
@@ -193,6 +193,27 @@ export function useBoard(boardId: string) {
     }
   }
 
+  async function createColumn(title: string) {
+    if (!supabase || !board) throw new Error("Board not ready");
+    const newColumn = await columnService.createColumn(supabase, {
+      board_id: board.id,
+      title,
+      sort_order: columns.length,
+      user_id: board.user_id,
+    });
+    setColumns((prev) => [...prev, { ...newColumn, tasks: [] }]);
+    return newColumn;
+  }
+
+  async function updateColumnTitle(columnId: string, title: string) {
+    if (!supabase) throw new Error("Supabase not ready");
+    const updated = await columnService.updateColumnTitle(supabase, columnId, title);
+    setColumns((prev) =>
+      prev.map((col) => (col.id === columnId ? { ...col, title: updated.title } : col))
+    );
+    return updated;
+  }
+
   return {
     board,
     columns,
@@ -201,6 +222,8 @@ export function useBoard(boardId: string) {
     updateBoard,
     reloadBoard: loadBoard,
     createRealTask,
+    createColumn,
+    updateColumnTitle,
   };
 }
 
