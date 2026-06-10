@@ -24,8 +24,29 @@ export default function Navbar( {boardTitle , onEditBoard , onFilterClick , filt
     console.log("pathname:", pathname);
 
     // const isHomePage = pathname === "/";
-    const isDashboardPage = pathname ==="/dashboard";
-    const isBoardPage = pathname.startsWith("/boards/"); // this checks the board page with its dynamic id
+    const isDashboardPage = pathname === "/dashboard";
+    const isBoardPage = pathname.startsWith("/boards/");
+    const isAnalyticsPage = pathname === "/dashboard/analytics";
+
+    if (isAnalyticsPage) {
+        return (
+            <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+                <div className="container mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        <span className="text-xl sm:text-2xl font-bold text-gray-900">TaskFlow</span>
+                        <div className="h-4 w-px bg-gray-300 hidden sm:block" />
+                        <Link href="/dashboard" className="hidden sm:flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors">
+                            <ArrowLeft className="h-4 w-4" />
+                            Dashboard
+                        </Link>
+                    </div>
+                    <div className="flex items-center space-x-2 sm:space-x-4">
+                        <UserButton />
+                    </div>
+                </div>
+            </header>
+        );
+    }
 
     if(isDashboardPage){
         return(

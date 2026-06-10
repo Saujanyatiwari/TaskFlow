@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBoards } from "@/lib/hooks/useBoards";
 import { useUser } from "@clerk/nextjs";
-import { Activity, BarChart3, Bot, Download, Filter, Grid3X3, LayoutDashboard, List, Loader2, Plus, Rocket, Search, X, Zap } from "lucide-react";
+import { Activity, ArrowRight, BarChart3, Bot, Download, Filter, Grid3X3, LayoutDashboard, List, Loader2, Plus, Rocket, Search, X, Zap } from "lucide-react";
 import Link from "next/link";
 import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -390,6 +390,28 @@ export default function DashboardPage() {
 
                     )}
                 </div>
+
+                {/* Analytics shortcut for Pro/Enterprise */}
+                {isAllowed("analytics") && (
+                    <div className="mb-6">
+                        <Link href="/dashboard/analytics">
+                            <Card className="hover:shadow-md transition-shadow cursor-pointer border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+                                <CardContent className="p-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-10 w-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
+                                            <BarChart3 className="h-5 w-5 text-blue-600" />
+                                        </div>
+                                        <div>
+                                            <p className="font-semibold text-gray-900 text-sm">Analytics Dashboard</p>
+                                            <p className="text-xs text-gray-500">Track task progress, priorities, and productivity trends</p>
+                                        </div>
+                                    </div>
+                                    <ArrowRight className="h-4 w-4 text-gray-400 shrink-0" />
+                                </CardContent>
+                            </Card>
+                        </Link>
+                    </div>
+                )}
 
                 {/* Locked Pro/Enterprise feature hints */}
                 {(!isAllowed("analytics") || !isAllowed("aiFeatures")) && (

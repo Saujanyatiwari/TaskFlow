@@ -18,6 +18,7 @@ import { TaskCard, SortableTaskCard } from "@/components/kanban/TaskCard";
 import { useFeatureAccess } from "@/lib/hooks/useFeatureAccess";
 import { FeatureName } from "@/lib/config/featureMatrix";
 import { LockedButton, FeatureUpgradeModal } from "@/components/feature-gate";
+import { exportBoardToCsv } from "@/lib/utils/exportCsv";
 import {
   DndContext,
   DragEndEvent,
@@ -631,7 +632,11 @@ export default function BoardPage(){
             <div className="flex items-center gap-2">
               {/* Export button */}
               {isAllowed("export") ? (
-                <Button variant="outline" size="sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportBoardToCsv(board?.title ?? "board", filteredColumns)}
+                >
                   <Download className="h-4 w-4 mr-1" />
                   Export
                 </Button>
