@@ -85,7 +85,7 @@ export function useAnalytics() {
       setColumns(colsResult.data ?? []);
 
       type RawResult = TaskRow & { columns: { board_id: string; title: string; user_id: string } | null };
-      const mapped: TaskRow[] = ((tasksResult.data ?? []) as RawResult[]).map((t) => ({
+      const mapped: TaskRow[] = ((tasksResult.data ?? []) as unknown as RawResult[]).map((t) => ({
         id: t.id,
         column_id: t.column_id,
         title: t.title,

@@ -191,7 +191,7 @@ export default function Home() {
                     <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">
                         Simple pricing
                     </h2>
-                    <p className="text-gray-500 mb-10">Start free. Upgrade when you're ready.</p>
+                    <p className="text-gray-500 mb-10">Start free. Upgrade when you&apos;re ready.</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-left mb-10">
                         <Card className="border-2 border-gray-200">
                             <CardContent className="p-6">
