@@ -1,12 +1,8 @@
 "use client";
 
-import Navbar from "@/components/navbar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { usePlanLimits } from "@/lib/hooks/usePlanLimits";
 import { useUser } from "@clerk/nextjs";
-import { Check, Zap } from "lucide-react";
+import { ArrowRight, Check, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 const FREE_FEATURES = [
@@ -28,123 +24,131 @@ export default function PricingPage() {
   const { plan } = usePlanLimits(0);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <div className="min-h-screen h-screen overflow-hidden bg-[#F5F0E8] flex flex-col">
 
-      <main className="container mx-auto px-4 py-12 sm:py-16">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-            Simple, transparent pricing
-          </h1>
-          <p className="text-lg text-gray-600 max-w-xl mx-auto">
-            Start free. Upgrade when you need more. No hidden fees.
-          </p>
-          {plan === "pro" && (
-            <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-yellow-100 px-4 py-1.5 text-sm font-medium text-yellow-700">
-              <Zap className="h-4 w-4" />
-              You are on the Pro plan
-            </div>
-          )}
+      {/* Navbar */}
+      <div className="w-full bg-[#F5F0E8] px-8 py-3 flex items-center justify-between flex-shrink-0">
+        <span className="text-[17px] font-semibold text-[#1A1816]">TaskFlow</span>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard"
+            className="px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-[#5A4A8B] hover:bg-[#4A3A7B] transition-colors flex items-center gap-1.5"
+          >
+            Go to Dashboard
+            <ArrowRight className="w-[14px] h-[14px]" />
+          </Link>
         </div>
+      </div>
+
+      {/* Main content */}
+      <main className="flex-1 flex flex-col items-center justify-center px-6">
+
+        <h1 className="text-[26px] font-semibold text-[#1A1816] text-center tracking-tight mb-1">
+          Simple, transparent pricing
+        </h1>
+        <p className="text-[13.5px] text-[#9C9890] text-center mb-8">
+          Start free. Upgrade when you need more. No hidden fees.
+        </p>
 
         {/* Plan Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+        <div className="flex gap-5 items-stretch w-full max-w-2xl">
 
           {/* Free Plan */}
-          <Card className={plan === "free" ? "ring-2 ring-blue-500" : ""}>
-            <CardHeader className="pb-4">
-              <div className="mb-3 h-6">
-                {plan === "free" && (
-                  <Badge className="bg-blue-500 text-white text-xs">Current Plan</Badge>
-                )}
-              </div>
-              <CardTitle className="text-xl">Free</CardTitle>
-              <div className="mt-2 flex items-end gap-1">
-                <span className="text-4xl font-bold text-gray-900">$0</span>
-                <span className="text-gray-500 mb-1">/month</span>
-              </div>
-              <p className="text-sm text-gray-500">Perfect for personal projects</p>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-3 mb-6">
-                {FREE_FEATURES.map((feature) => (
-                  <li key={feature} className="flex items-center gap-2 text-sm text-gray-700">
-                    <Check className="h-4 w-4 text-green-500 shrink-0" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              {isSignedIn ? (
-                <Link href="/dashboard">
-                  <Button variant="outline" className="w-full">
-                    Go to Dashboard
-                  </Button>
-                </Link>
-              ) : (
-                <Link href="/sign-up">
-                  <Button variant="outline" className="w-full">
-                    Get Started Free
-                  </Button>
-                </Link>
-              )}
-            </CardContent>
-          </Card>
+          <div className="flex-1 bg-white rounded-2xl border-2 border-[#C0B3E1] p-6 flex flex-col">
+            {plan === "free" && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full bg-[#EEEDFE] text-[#5A4A8B] text-[11px] font-semibold mb-3">
+                Current Plan
+              </span>
+            )}
+            <p className="text-[22px] font-semibold text-[#1A1816] mb-1">Free</p>
+            <div className="flex items-end mb-1">
+              <span className="text-[32px] font-bold text-[#1A1816]">$0</span>
+              <span className="text-[13px] text-[#9C9890] ml-1">/month</span>
+            </div>
+            <p className="text-[12.5px] text-[#9C9890] mb-4">Perfect for personal projects</p>
+            <ul>
+              {FREE_FEATURES.map((feature) => (
+                <li key={feature} className="flex items-center gap-2 text-[13px] text-[#5A5753] mb-2">
+                  <Check className="w-[14px] h-[14px] text-[#A9C2AA] shrink-0" />
+                  {feature}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-auto" />
+            {isSignedIn ? (
+              <Link
+                href="/dashboard"
+                className="w-full py-2.5 rounded-xl text-[13px] font-medium text-[#5A5753] bg-[#F5F0E8] hover:bg-[#EDE9E0] border border-[#EDE9E0] transition-colors text-center mt-4 block"
+              >
+                Go to Dashboard
+              </Link>
+            ) : (
+              <Link
+                href="/sign-up"
+                className="w-full py-2.5 rounded-xl text-[13px] font-medium text-[#5A5753] bg-[#F5F0E8] hover:bg-[#EDE9E0] border border-[#EDE9E0] transition-colors text-center mt-4 block"
+              >
+                Get Started Free
+              </Link>
+            )}
+          </div>
 
           {/* Pro Plan */}
-          <Card className={`bg-gray-900 text-white border-gray-800 ${plan === "pro" ? "ring-2 ring-yellow-400" : ""}`}>
-            <CardHeader className="pb-4">
-              <div className="mb-3 h-6">
-                {plan === "pro" ? (
-                  <Badge className="bg-yellow-400 text-black text-xs">Current Plan</Badge>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 px-3 py-1 text-xs font-semibold text-white">
-                    <Zap className="h-3 w-3" /> Most Popular
-                  </span>
-                )}
-              </div>
-              <CardTitle className="text-xl text-white">Pro</CardTitle>
-              <div className="mt-2 flex items-end gap-1">
-                <span className="text-4xl font-bold text-white">$9</span>
-                <span className="text-gray-400 mb-1">/month</span>
-              </div>
-              <p className="text-sm text-gray-400">For power users and growing teams</p>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-3 mb-6">
-                {PRO_FEATURES.map((feature) => (
-                  <li key={feature} className="flex items-center gap-2 text-sm text-gray-300">
-                    <Check className="h-4 w-4 text-yellow-400 shrink-0" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              {plan === "pro" ? (
-                <Button disabled className="w-full bg-yellow-400 text-black font-semibold opacity-80">
-                  <Zap className="h-4 w-4 mr-2" />
-                  Current Plan
-                </Button>
-              ) : (
-                <Button className="w-full bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-white font-semibold">
-                  <Zap className="h-4 w-4 mr-2" />
-                  Upgrade to Pro — Coming Soon
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+          <div className="flex-1 bg-[#1A1816] rounded-2xl p-6 flex flex-col">
+            {plan === "pro" ? (
+              <span className="inline-flex items-center px-3 py-1 rounded-full bg-[#EEEDFE] text-[#5A4A8B] text-[11px] font-semibold mb-3">
+                Current Plan
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#5A4A8B] text-white text-[11px] font-semibold mb-3">
+                <Sparkles className="w-3 h-3" /> Most Popular
+              </span>
+            )}
+            <p className="text-[22px] font-semibold text-white mb-1">Pro</p>
+            <div className="flex items-end mb-1">
+              <span className="text-[32px] font-bold text-white">$9</span>
+              <span className="text-[13px] text-[#9C9890] ml-1">/month</span>
+            </div>
+            <p className="text-[12.5px] text-[#9C9890] mb-4">For power users and growing teams</p>
+            <ul>
+              {PRO_FEATURES.map((feature) => (
+                <li key={feature} className="flex items-center gap-2 text-[13px] text-white mb-2">
+                  <Check className="w-[14px] h-[14px] text-[#A9C2AA] shrink-0" />
+                  {feature}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-auto" />
+            {plan === "pro" ? (
+              <button
+                disabled
+                className="w-full py-2.5 rounded-xl text-[13px] font-medium text-white bg-[#5A4A8B] opacity-70 text-center mt-4 flex items-center justify-center gap-2 cursor-not-allowed"
+              >
+                <Sparkles className="w-[14px] h-[14px]" />
+                Current Plan
+              </button>
+            ) : (
+              <button
+                className="w-full py-2.5 rounded-xl text-[13px] font-medium text-white bg-[#5A4A8B] hover:bg-[#4A3A7B] transition-colors text-center mt-4 flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-[14px] h-[14px]" />
+                Upgrade to Pro — Coming Soon
+              </button>
+            )}
+          </div>
 
         </div>
 
         {/* Footer note */}
-        <div className="mt-12 text-center text-sm text-gray-500 space-y-1">
+        <div className="text-[12px] text-[#B0ADA6] text-center mt-6 space-y-1">
           <p>All plans include SSL security, automatic backups, and 99.9% uptime SLA.</p>
           <p>
             Questions?{" "}
-            <a href="mailto:support@taskflow.app" className="underline hover:text-gray-700">
+            <a href="mailto:support@taskflow.app" className="underline hover:text-[#5A5753]">
               Contact support
             </a>
           </p>
         </div>
+
       </main>
     </div>
   );

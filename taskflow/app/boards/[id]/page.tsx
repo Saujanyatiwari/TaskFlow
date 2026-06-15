@@ -1,23 +1,20 @@
 "use client";
 
-import Navbar from "@/components/navbar";
+import { UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Dialog as RadixDialog } from "radix-ui";
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogOverlay, DialogPortal, DialogTitle } from "@/components/ui/dialog";
 import { useBoard } from "@/lib/hooks/useBoards";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
-import { Download, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowLeft, ArrowUpDown, Download, Filter, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ColumnWithTasks, Task } from "@/lib/supabase/models";
 import { TaskCard, SortableTaskCard } from "@/components/kanban/TaskCard";
 import { TaskEditModal } from "@/components/kanban/TaskEditModal";
 import { useFeatureAccess } from "@/lib/hooks/useFeatureAccess";
 import { FeatureName } from "@/lib/config/featureMatrix";
-import { LockedButton, FeatureUpgradeModal } from "@/components/feature-gate";
+import { FeatureUpgradeModal } from "@/components/feature-gate";
 import { exportBoardToCsv } from "@/lib/utils/exportCsv";
 import {
   DndContext,
@@ -67,7 +64,7 @@ function Column({
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   return (
-    <div className="w-full lg:shrink-0 lg:w-80">
+    <div className="w-full md:min-w-[280px] md:max-w-[280px] md:flex-shrink-0">
       <div className="bg-white rounded-lg shadow-sm border">
 
         {/* Column Header */}
@@ -131,14 +128,16 @@ function Column({
                 <Plus />
                 Add Task
               </Button>
-            <DialogContent className="w-[95vw] max-w-[425px] mx-auto">
-              <DialogHeader>
-                <DialogTitle>Create New Task</DialogTitle>
-                <p className="text-sm text-gray-600">Add a task to the board</p>
-              </DialogHeader>
-
+          <DialogPortal>
+            <DialogOverlay className="!bg-black/40 backdrop-blur-sm" />
+            <RadixDialog.Content className="fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-md bg-white rounded-2xl shadow-xl border border-[#EDE9E0] p-6 outline-none">
+              <DialogClose className="absolute top-4 right-4 text-[#9C9890] hover:text-[#1A1816] transition-colors">
+                <X className="w-4 h-4" />
+                <span className="sr-only">Close</span>
+              </DialogClose>
+              <DialogTitle className="text-[17px] font-semibold text-[#1A1816] mb-1">Create New Task</DialogTitle>
+              <p className="text-[12.5px] text-[#9C9890] mb-5">Task will be added to this column</p>
               <form
-                className="space-y-4"
                 onSubmit={async (e) => {
                   e.preventDefault();
                   setIsSaving(true);
@@ -164,61 +163,61 @@ function Column({
                   }
                 }}
               >
-                <div className="space-y-2">
-                  <Label>Title *</Label>
-                  <Input
-                    id="title"
+                <div className="mb-4">
+                  <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Title *</label>
+                  <input
                     name="title"
                     placeholder="Enter task title"
                     required
+                    className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2.5 text-[13px] text-[#1A1816] placeholder:text-[#B0ADA6] outline-none focus:border-[#C0B3E1] transition-colors"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Textarea
-                    id="description"
+                <div className="mb-4">
+                  <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Description</label>
+                  <textarea
                     name="description"
                     placeholder="Enter task description"
                     rows={3}
+                    className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2.5 text-[13px] text-[#1A1816] placeholder:text-[#B0ADA6] outline-none focus:border-[#C0B3E1] transition-colors resize-none"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Assignee</Label>
-                  <Input
-                    id="assignee"
+                <div className="mb-4">
+                  <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Assignee</label>
+                  <input
                     name="assignee"
                     placeholder="Who should do this?"
+                    className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2.5 text-[13px] text-[#1A1816] placeholder:text-[#B0ADA6] outline-none focus:border-[#C0B3E1] transition-colors"
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Priority</Label>
-                  <Select name="priority" defaultValue="medium">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {["low", "medium", "high"].map((priority, key) => (
-                        <SelectItem key={key} value={priority}>
-                          {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="mb-4">
+                  <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Priority</label>
+                  <select
+                    name="priority"
+                    defaultValue="medium"
+                    className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2.5 text-[13px] text-[#1A1816] outline-none focus:border-[#C0B3E1] transition-colors appearance-none"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Due Date</Label>
-                  <Input type="date" id="dueDate" name="dueDate" />
+                <div className="mb-4">
+                  <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Due Date</label>
+                  <input
+                    type="date"
+                    name="dueDate"
+                    className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2.5 text-[13px] text-[#1A1816] outline-none focus:border-[#C0B3E1] transition-colors"
+                  />
                 </div>
-
-                <div className="flex justify-end space-x-2 pt-4">
-                  <Button type="submit" disabled={isSaving}>
+                <div className="flex items-center justify-end gap-3 mt-6">
+                  <button type="button" onClick={() => setIsAddTaskOpen(false)} className="px-4 py-2 rounded-xl text-[13px] font-medium text-[#5A5753] bg-[#F5F0E8] hover:bg-[#EDE9E0] border border-[#EDE9E0]">Cancel</button>
+                  <button type="submit" disabled={isSaving} className="px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-[#5A4A8B] hover:bg-[#4A3A7B] transition-colors disabled:opacity-70">
                     {isSaving ? "Saving..." : "Create Task"}
-                  </Button>
+                  </button>
                 </div>
               </form>
-            </DialogContent>
+            </RadixDialog.Content>
+          </DialogPortal>
           </Dialog>
         </div>
       </div>
@@ -248,12 +247,14 @@ export default function BoardPage(){
     const [isToolbarSaving, setIsToolbarSaving] = useState(false);
     const [toolbarPriority, setToolbarPriority] = useState<"low" | "medium" | "high">("medium");
 
-    const { isAllowed } = useFeatureAccess();
+    const { plan } = useFeatureAccess();
+    const router = useRouter();
 
     const [searchQuery, setSearchQuery] = useState("");
     const [priorityFilter, setPriorityFilter] = useState<"all" | "low" | "medium" | "high">("all");
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
+    const [sortOrder, setSortOrder] = useState<"none" | "asc" | "desc">("none");
 
     useEffect(() => {
       setLocalColumns(columns);
@@ -273,6 +274,8 @@ export default function BoardPage(){
       setActiveTaskId(null);
 
       if (!over || active.id === over.id) return;
+
+      setSortOrder("none");
 
       const activeId = active.id as string;
       const overId = over.id as string;
@@ -317,17 +320,22 @@ export default function BoardPage(){
       [activeTaskId, localColumns]
     );
 
-    const filteredColumns = useMemo(() => localColumns.map(col => ({
-      ...col,
-      tasks: col.tasks.filter(task => {
+    const filteredColumns = useMemo(() => localColumns.map(col => {
+      const filtered = col.tasks.filter(task => {
         if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
         if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
         if ((dateFrom || dateTo) && !task.due_date) return false;
         if (dateFrom && task.due_date && task.due_date < dateFrom) return false;
         if (dateTo && task.due_date && task.due_date > dateTo) return false;
         return true;
-      }),
-    })), [localColumns, searchQuery, priorityFilter, dateFrom, dateTo]);
+      });
+      if (sortOrder === "asc") {
+        filtered.sort((a, b) => a.title.localeCompare(b.title));
+      } else if (sortOrder === "desc") {
+        filtered.sort((a, b) => b.title.localeCompare(a.title));
+      }
+      return { ...col, tasks: filtered };
+    }), [localColumns, searchQuery, priorityFilter, dateFrom, dateTo, sortOrder]);
 
     const activeFilterCount =
       (searchQuery ? 1 : 0) +
@@ -343,7 +351,7 @@ export default function BoardPage(){
 
     if (loading) {
       return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-[#F5F0E8]">
           <div className="bg-white border-b h-14 animate-pulse" />
           <div className="container mx-auto px-4 py-6">
             <div className="flex gap-6 overflow-x-auto pb-4">
@@ -365,7 +373,7 @@ export default function BoardPage(){
 
     if (error) {
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="min-h-screen bg-[#F5F0E8] flex items-center justify-center">
           <div className="text-center">
             <p className="text-lg font-semibold text-gray-800 mb-1">Failed to load board</p>
             <p className="text-sm text-gray-500">{error}</p>
@@ -426,100 +434,216 @@ export default function BoardPage(){
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <Navbar
-              boardTitle={board?.title}
-              onFilterClick={() => setIsFilterOpen(true)}
-              filterCount={activeFilterCount}
-            />
+        <div className="min-h-screen bg-[#F5F0E8]">
+            {/* Navbar */}
+            <div className="flex items-center justify-between px-3 py-3 bg-white border-b border-[#F0EBE2]">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className="w-8 h-8 rounded-lg bg-[#F5F0E8] text-[#5A5753] flex items-center justify-center cursor-pointer flex-shrink-0"
+                  onClick={() => router.back()}
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: board?.color ?? "#ccc" }} />
+                  <span className="text-[14px] font-semibold text-[#1A1816] truncate max-w-[160px]">{board?.title}</span>
+                </div>
+              </div>
+              <UserButton />
+            </div>
+            {/* Toolbar — mobile (below md) */}
+            <div className="md:hidden flex items-center justify-between px-3 py-2 bg-white border-b border-[#EDE9E0] w-full">
+              <div className="flex items-center gap-1.5 bg-[#F5F0E8] border border-[#EDE9E0] rounded-[9px] px-3 py-1.5 flex-1 min-w-0 mr-2">
+                <Search className="w-3.5 h-3.5 text-[#3A3835] flex-shrink-0" />
+                <input
+                  className="bg-transparent text-[12px] text-[#3A3835] w-full min-w-0 outline-none placeholder:text-[#3A3835]/50"
+                  placeholder="Search tasks…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#F5F0E8] text-[#5A5753] cursor-pointer hover:bg-[#EDE9E0]"
+                  onClick={() => setIsFilterOpen(true)}
+                >
+                  <Filter className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#F5F0E8] text-[#5A5753] cursor-pointer hover:bg-[#EDE9E0]"
+                  onClick={() => setSortOrder(s => s === "none" ? "asc" : s === "asc" ? "desc" : "none")}
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#F5F0E8] text-[#5A5753] cursor-pointer hover:bg-[#EDE9E0]"
+                  onClick={() => setIsAddColumnOpen(true)}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+                {plan !== "free" && (
+                  <button
+                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#F5F0E8] text-[#5A5753] cursor-pointer hover:bg-[#EDE9E0]"
+                    onClick={() => exportBoardToCsv(board?.title ?? "board", filteredColumns)}
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <button
+                className="ml-1 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#5A4A8B] text-white text-[12px] font-medium flex-shrink-0 cursor-pointer hover:bg-[#4A3A7B]"
+                onClick={openToolbarAddTask}
+              >
+                <Plus className="w-3 h-3" /> Add
+              </button>
+            </div>
+            {/* Toolbar — desktop (md and above) */}
+            <div className="hidden md:flex items-center justify-between px-6 py-2.5 bg-white border-b border-[#EDE9E0]">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-[#F5F0E8] border border-[#EDE9E0] rounded-[9px] px-3 py-1.5">
+                  <Search className="w-3.5 h-3.5 text-[#3A3835]" />
+                  <input
+                    className="bg-transparent text-[12px] text-[#3A3835] w-[200px] outline-none placeholder:text-[#3A3835]/50"
+                    placeholder="Search tasks…"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <button
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[9px] text-[12px] font-medium text-[#3A3835] bg-[#F5F0E8] border border-[#EDE9E0] cursor-pointer hover:bg-[#EDE9E0]"
+                  onClick={() => setIsFilterOpen(true)}
+                >
+                  <Filter className="w-3.5 h-3.5" /> Filter
+                </button>
+                <button
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[9px] text-[12px] font-medium text-[#3A3835] bg-[#F5F0E8] border border-[#EDE9E0] cursor-pointer hover:bg-[#EDE9E0]"
+                  onClick={() => setSortOrder(s => s === "none" ? "asc" : s === "asc" ? "desc" : "none")}
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                  {sortOrder === "asc" ? "A → Z" : sortOrder === "desc" ? "Z → A" : "Sort"}
+                </button>
+                <button
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[9px] text-[12px] font-medium text-[#3A3835] bg-[#F5F0E8] border border-[#EDE9E0] cursor-pointer hover:bg-[#EDE9E0]"
+                  onClick={() => setIsAddColumnOpen(true)}
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Column
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                {plan !== "free" && (
+                  <button
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-[9px] text-[12px] font-medium text-[#3A3835] bg-[#F5F0E8] border border-[#EDE9E0] cursor-pointer hover:bg-[#EDE9E0]"
+                    onClick={() => exportBoardToCsv(board?.title ?? "board", filteredColumns)}
+                  >
+                    <Download className="w-3.5 h-3.5" /> Export CSV
+                  </button>
+                )}
+                <button
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[9px] text-[12px] font-medium text-white bg-[#5A4A8B] cursor-pointer hover:bg-[#4A3A7B]"
+                  onClick={openToolbarAddTask}
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Task
+                </button>
+              </div>
+            </div>
 
         <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-          <DialogContent className="w-[95vw] max-w-md mx-auto">
-            <DialogHeader>
-              <DialogTitle>Filter Tasks</DialogTitle>
-              <p className="text-sm text-gray-600">Filters apply instantly across all columns</p>
-            </DialogHeader>
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <Label>Priority</Label>
-                <div className="flex gap-2">
+          <DialogPortal>
+            <DialogOverlay className="!bg-black/40 backdrop-blur-sm" />
+            <RadixDialog.Content className="fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-[300px] bg-white rounded-2xl shadow-xl border border-[#EDE9E0] p-5 outline-none">
+              <DialogClose className="absolute top-4 right-4 text-[#9C9890] hover:text-[#1A1816] transition-colors">
+                <X className="w-4 h-4" />
+                <span className="sr-only">Close</span>
+              </DialogClose>
+              <DialogTitle className="text-[17px] font-semibold text-[#1A1816] mb-1">Filters</DialogTitle>
+              <div className="mb-4">
+                <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Priority</label>
+                <div className="flex flex-wrap gap-1.5">
                   {(["all", "low", "medium", "high"] as const).map((p) => (
-                    <Button
+                    <button
                       key={p}
                       type="button"
-                      size="sm"
-                      variant={priorityFilter === p ? "default" : "outline"}
                       onClick={() => setPriorityFilter(p)}
-                      className="capitalize"
+                      className={`px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors ${
+                        priorityFilter === p
+                          ? "bg-[#5A4A8B] text-white border-[#5A4A8B]"
+                          : "bg-[#F5F0E8] text-[#5A5753] border-[#EDE9E0] hover:bg-[#EDE9E0]"
+                      }`}
                     >
                       {p === "all" ? "All" : p.charAt(0).toUpperCase() + p.slice(1)}
-                    </Button>
+                    </button>
                   ))}
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <Label>Due Date Range</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="flex-1"
-                  />
-                  <span className="text-gray-400 text-sm shrink-0">to</span>
-                  <Input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="flex-1"
-                  />
-                </div>
+              <div className="mb-4">
+                <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Due Date From</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2 text-[13px] text-[#1A1816] outline-none focus:border-[#C0B3E1] transition-colors"
+                />
               </div>
-
-              <div className="flex justify-between pt-2">
-                <Button
+              <div className="mb-4">
+                <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Due Date To</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2 text-[13px] text-[#1A1816] outline-none focus:border-[#C0B3E1] transition-colors"
+                />
+              </div>
+              <div className="flex items-center justify-between mt-6">
+                <button
                   type="button"
-                  variant="outline"
                   onClick={() => { clearFilters(); setIsFilterOpen(false); }}
+                  className="px-4 py-2 rounded-xl text-[13px] font-medium text-[#5A5753] bg-[#F5F0E8] hover:bg-[#EDE9E0] border border-[#EDE9E0]"
                 >
-                  Clear Filters
-                </Button>
-                <Button type="button" onClick={() => setIsFilterOpen(false)}>
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsFilterOpen(false)}
+                  className="px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-[#5A4A8B] hover:bg-[#4A3A7B] transition-colors"
+                >
                   Done
-                </Button>
+                </button>
               </div>
-            </div>
-          </DialogContent>
+            </RadixDialog.Content>
+          </DialogPortal>
         </Dialog>
 
 
         {/* Edit Column Dialog */}
         <Dialog open={!!editingColumn} onOpenChange={(open) => { if (!open) setEditingColumn(null); }}>
-          <DialogContent className="w-[95vw] max-w-md mx-auto">
-            <DialogHeader>
-              <DialogTitle>Rename Column</DialogTitle>
-            </DialogHeader>
-            <form className="space-y-4" onSubmit={handleUpdateColumnTitle}>
-              <div className="space-y-2">
-                <Label htmlFor="editColumnTitle">Column Title</Label>
-                <Input
-                  id="editColumnTitle"
-                  value={editColumnTitle}
-                  onChange={(e) => setEditColumnTitle(e.target.value)}
-                  placeholder="Enter column title..."
-                  required
-                  autoFocus
-                />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setEditingColumn(null)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Save</Button>
-              </div>
-            </form>
-          </DialogContent>
+          <DialogPortal>
+            <DialogOverlay className="!bg-black/40 backdrop-blur-sm" />
+            <RadixDialog.Content className="fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-md bg-white rounded-2xl shadow-xl border border-[#EDE9E0] p-6 outline-none">
+              <DialogClose className="absolute top-4 right-4 text-[#9C9890] hover:text-[#1A1816] transition-colors">
+                <X className="w-4 h-4" />
+                <span className="sr-only">Close</span>
+              </DialogClose>
+              <DialogTitle className="text-[17px] font-semibold text-[#1A1816] mb-1">Rename Column</DialogTitle>
+              <form onSubmit={handleUpdateColumnTitle}>
+                <div className="mb-4">
+                  <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Column Title</label>
+                  <input
+                    id="editColumnTitle"
+                    value={editColumnTitle}
+                    onChange={(e) => setEditColumnTitle(e.target.value)}
+                    placeholder="Enter column title..."
+                    required
+                    autoFocus
+                    className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2.5 text-[13px] text-[#1A1816] placeholder:text-[#B0ADA6] outline-none focus:border-[#C0B3E1] transition-colors"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-3 mt-6">
+                  <button type="button" onClick={() => setEditingColumn(null)} className="px-4 py-2 rounded-xl text-[13px] font-medium text-[#5A5753] bg-[#F5F0E8] hover:bg-[#EDE9E0] border border-[#EDE9E0]">Cancel</button>
+                  <button type="submit" className="px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-[#5A4A8B] hover:bg-[#4A3A7B] transition-colors">Save</button>
+                </div>
+              </form>
+            </RadixDialog.Content>
+          </DialogPortal>
         </Dialog>
 
         {/* Delete Column Dialog */}
@@ -554,126 +678,140 @@ export default function BoardPage(){
 
         {/* Add Column Dialog */}
         <Dialog open={isAddColumnOpen} onOpenChange={setIsAddColumnOpen}>
-          <DialogContent className="w-[95vw] max-w-md mx-auto">
-            <DialogHeader>
-              <DialogTitle>Add Column</DialogTitle>
-            </DialogHeader>
-            <form className="space-y-4" onSubmit={handleCreateColumn}>
-              <div className="space-y-2">
-                <Label htmlFor="newColumnTitle">Column Title</Label>
-                <Input
-                  id="newColumnTitle"
-                  value={newColumnTitle}
-                  onChange={(e) => setNewColumnTitle(e.target.value)}
-                  placeholder="e.g. Backlog"
-                  required
-                  autoFocus
-                />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setIsAddColumnOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Add Column</Button>
-              </div>
-            </form>
-          </DialogContent>
+          <DialogPortal>
+            <DialogOverlay className="!bg-black/40 backdrop-blur-sm" />
+            <RadixDialog.Content className="fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-md bg-white rounded-2xl shadow-xl border border-[#EDE9E0] p-6 outline-none">
+              <DialogClose className="absolute top-4 right-4 text-[#9C9890] hover:text-[#1A1816] transition-colors">
+                <X className="w-4 h-4" />
+                <span className="sr-only">Close</span>
+              </DialogClose>
+              <DialogTitle className="text-[17px] font-semibold text-[#1A1816] mb-1">Add Column</DialogTitle>
+              <form onSubmit={handleCreateColumn}>
+                <div className="mb-4">
+                  <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Column Title</label>
+                  <input
+                    id="newColumnTitle"
+                    value={newColumnTitle}
+                    onChange={(e) => setNewColumnTitle(e.target.value)}
+                    placeholder="e.g. Backlog"
+                    required
+                    autoFocus
+                    className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2.5 text-[13px] text-[#1A1816] placeholder:text-[#B0ADA6] outline-none focus:border-[#C0B3E1] transition-colors"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-3 mt-6">
+                  <button type="button" onClick={() => setIsAddColumnOpen(false)} className="px-4 py-2 rounded-xl text-[13px] font-medium text-[#5A5753] bg-[#F5F0E8] hover:bg-[#EDE9E0] border border-[#EDE9E0]">Cancel</button>
+                  <button type="submit" className="px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-[#5A4A8B] hover:bg-[#4A3A7B] transition-colors">Add Column</button>
+                </div>
+              </form>
+            </RadixDialog.Content>
+          </DialogPortal>
         </Dialog>
 
         {/* Toolbar Add Task Dialog */}
         <Dialog open={isToolbarAddTaskOpen} onOpenChange={setIsToolbarAddTaskOpen}>
-          <DialogContent className="w-[95vw] max-w-[425px] mx-auto">
-            <DialogHeader>
-              <DialogTitle>Create New Task</DialogTitle>
-              <p className="text-sm text-gray-600">Task will be added to the first column</p>
-            </DialogHeader>
-            <form
-              className="space-y-4"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const colId = localColumns[0]?.id;
-                if (!colId) return;
-                setIsToolbarSaving(true);
-                try {
-                  const formData = new FormData(e.currentTarget);
-                  await createRealTask(colId, {
-                    title: formData.get("title") as string,
-                    description: (formData.get("description") as string) || undefined,
-                    assignee: (formData.get("assignee") as string) || undefined,
-                    dueDate: (formData.get("dueDate") as string) || undefined,
-                    priority: toolbarPriority,
-                  });
-                  setToolbarPriority("medium");
-                  setIsToolbarAddTaskOpen(false);
-                } finally {
-                  setIsToolbarSaving(false);
-                }
-              }}
-            >
-              <div className="space-y-2">
-                <Label>Title *</Label>
-                <Input name="title" placeholder="Enter task title" required />
-              </div>
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Textarea name="description" placeholder="Enter task description" rows={3} />
-              </div>
-              <div className="space-y-2">
-                <Label>Assignee</Label>
-                <Input name="assignee" placeholder="Person responsible for the task" />
-              </div>
-              <div className="space-y-2">
-                <Label>Priority</Label>
-                <Select value={toolbarPriority} onValueChange={(v) => setToolbarPriority(v as "low" | "medium" | "high")}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    {(["low", "medium", "high"] as const).map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p.charAt(0).toUpperCase() + p.slice(1)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Due Date</Label>
-                <Input type="date" name="dueDate" />
-              </div>
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsToolbarAddTaskOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isToolbarSaving}>
-                  {isToolbarSaving ? "Saving..." : "Create Task"}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
+          <DialogPortal>
+            <DialogOverlay className="!bg-black/40 backdrop-blur-sm" />
+            <RadixDialog.Content className="fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-md bg-white rounded-2xl shadow-xl border border-[#EDE9E0] p-6 outline-none">
+              <DialogClose className="absolute top-4 right-4 text-[#9C9890] hover:text-[#1A1816] transition-colors">
+                <X className="w-4 h-4" />
+                <span className="sr-only">Close</span>
+              </DialogClose>
+
+              <DialogTitle className="text-[17px] font-semibold text-[#1A1816] mb-1">Create New Task</DialogTitle>
+              <p className="text-[12.5px] text-[#9C9890] mb-5">Task will be added to the first column</p>
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const colId = localColumns[0]?.id;
+                  if (!colId) return;
+                  setIsToolbarSaving(true);
+                  try {
+                    const formData = new FormData(e.currentTarget);
+                    await createRealTask(colId, {
+                      title: formData.get("title") as string,
+                      description: (formData.get("description") as string) || undefined,
+                      assignee: (formData.get("assignee") as string) || undefined,
+                      dueDate: (formData.get("dueDate") as string) || undefined,
+                      priority: toolbarPriority,
+                    });
+                    setToolbarPriority("medium");
+                    setIsToolbarAddTaskOpen(false);
+                  } finally {
+                    setIsToolbarSaving(false);
+                  }
+                }}
+              >
+                <div className="mb-4">
+                  <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Title *</label>
+                  <input
+                    name="title"
+                    placeholder="Enter task title"
+                    required
+                    className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2.5 text-[13px] text-[#1A1816] placeholder:text-[#B0ADA6] outline-none focus:border-[#C0B3E1] transition-colors"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Description</label>
+                  <textarea
+                    name="description"
+                    placeholder="Enter task description"
+                    rows={3}
+                    className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2.5 text-[13px] text-[#1A1816] placeholder:text-[#B0ADA6] outline-none focus:border-[#C0B3E1] transition-colors resize-none"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Assignee</label>
+                  <input
+                    name="assignee"
+                    placeholder="Person responsible for the task"
+                    className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2.5 text-[13px] text-[#1A1816] placeholder:text-[#B0ADA6] outline-none focus:border-[#C0B3E1] transition-colors"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Priority</label>
+                  <select
+                    value={toolbarPriority}
+                    onChange={(e) => setToolbarPriority(e.target.value as "low" | "medium" | "high")}
+                    className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2.5 text-[13px] text-[#1A1816] outline-none focus:border-[#C0B3E1] transition-colors"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div className="mb-4">
+                  <label className="text-[12.5px] font-medium text-[#5A5753] mb-1.5 block">Due Date</label>
+                  <input
+                    type="date"
+                    name="dueDate"
+                    className="w-full bg-[#F5F0E8] border border-[#EDE9E0] rounded-xl px-3 py-2.5 text-[13px] text-[#1A1816] outline-none focus:border-[#C0B3E1] transition-colors"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setIsToolbarAddTaskOpen(false)}
+                    className="px-4 py-2 rounded-xl text-[13px] font-medium text-[#5A5753] bg-[#F5F0E8] hover:bg-[#EDE9E0] border border-[#EDE9E0]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isToolbarSaving}
+                    className="px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-[#5A4A8B] hover:bg-[#4A3A7B] transition-colors disabled:opacity-70"
+                  >
+                    {isToolbarSaving ? "Saving..." : "Create Task"}
+                  </button>
+                </div>
+              </form>
+            </RadixDialog.Content>
+          </DialogPortal>
         </Dialog>
 
         {/* Board Content */}
         <main className="container mx-auto px-2 sm:px-4 py-4 sm:py-6">
-          {/* Search bar */}
-          <div className="mb-4 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-            <Input
-              placeholder="Search tasks…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-9"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-
           {/* Active filter chips */}
           {activeFilterCount > 0 && (
             <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -696,43 +834,6 @@ export default function BoardPage(){
             </div>
           )}
 
-          {/* Stats */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 space-y-4 sm:space-y-0">
-            <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-              <div className="text-sm text-gray-600">
-                <span className="font-medium">Total Tasks: </span>
-                {localColumns.reduce((sum, col) => sum + col.tasks.length, 0)}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {/* Export button */}
-              {isAllowed("export") ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => exportBoardToCsv(board?.title ?? "board", filteredColumns)}
-                >
-                  <Download className="h-4 w-4 mr-1" />
-                  Export
-                </Button>
-              ) : (
-                <LockedButton
-                  label="Export"
-                  requiredPlan="Pro"
-                  size="sm"
-                  onClick={() => setLockedFeature("export")}
-                />
-              )}
-
-              {/* Toolbar Add Task button */}
-              <Button className="w-full sm:w-auto" onClick={openToolbarAddTask}>
-                <Plus />
-                Add Task
-              </Button>
-            </div>
-          </div>
-
           {/* Board Columns */}
           <DndContext
             sensors={sensors}
@@ -740,13 +841,7 @@ export default function BoardPage(){
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <div
-              className="flex flex-col lg:flex-row lg:space-x-6 lg:overflow-x-auto
-            lg:pb-6 lg:px-2 lg:-mx-2 lg:[&::-webkit-scrollbar]:h-2
-            lg:[&::-webkit-scrollbar-track]:bg-gray-100
-            lg:[&::-webkit-scrollbar-thumb]:bg-gray-300 lg:[&::-webkit-scrollbar-thumb]:rounded-full
-            space-y-4 lg:space-y-0"
-            >
+            <div className="flex flex-col gap-4 px-3 py-4 md:flex-row md:overflow-x-auto md:px-6">
               {filteredColumns.map((column) => (
                 <Column
                   key={column.id}
@@ -776,16 +871,7 @@ export default function BoardPage(){
                 </Column>
               ))}
 
-              {/* Add Column button */}
-              <div className="w-full lg:shrink-0 lg:w-80">
-                <button
-                  onClick={() => setIsAddColumnOpen(true)}
-                  className="w-full h-12 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-600 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Column
-                </button>
-              </div>
+
             </div>
             <DragOverlay>
               {activeTask ? <TaskCard task={activeTask} /> : null}

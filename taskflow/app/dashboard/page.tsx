@@ -1,25 +1,36 @@
 "use client";
-import Navbar from "@/components/navbar";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useBoards } from "@/lib/hooks/useBoards";
-import { useUser } from "@clerk/nextjs";
-import { Activity, ArrowRight, BarChart3, Download, Filter, Grid3X3, LayoutDashboard, List, Loader2, MoreHorizontal, Pencil, Plus, Rocket, Search, Trash2, X, Zap } from "lucide-react";
+import { useBoard, useBoards } from "@/lib/hooks/useBoards";
+import { useUser, useClerk, UserButton } from "@clerk/nextjs";
+import {
+    Activity, AlertTriangle, ArrowRight, ArrowUpDown, BarChart2, BarChart3,
+    Calendar, CalendarDays, Check, CheckSquare, Download, Filter, Grid3X3,
+    Kanban, LayoutDashboard, LayoutGrid, List, Loader2, Lock, LogOut, Menu,
+    MoreHorizontal, Pencil, Plus, Rocket, Search, Settings, Sparkles, Trash2, X,
+} from "lucide-react";
 import Link from "next/link";
-import { useState, useMemo } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useRouter } from "next/navigation";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogOverlay, DialogPortal, DialogTitle } from "@/components/ui/dialog";
+import { Dialog as RadixDialog } from "radix-ui";
 import { usePlanLimits } from "@/lib/hooks/usePlanLimits";
 import { useFeatureAccess } from "@/lib/hooks/useFeatureAccess";
 import { FeatureName } from "@/lib/config/featureMatrix";
 import { LockedFeatureCard, FeatureUpgradeModal } from "@/components/feature-gate";
 import { Board } from "@/lib/supabase/models";
+import { exportBoardToCsv } from "@/lib/utils/exportCsv";
 
 export default function DashboardPage() {
-    const {user} = useUser();
-    const {createBoard, boards, loading, error, updateBoard, deleteBoard} = useBoards();
+    const router = useRouter();
+    const { user } = useUser();
+    const { signOut } = useClerk();
+    const { createBoard, boards, loading, error, updateBoard, deleteBoard } = useBoards();
+
+    // ── legacy state (kept for dialogs + sidebar board list) ──
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [isCreateBoardOpen, setIsCreateBoardOpen] = useState(false);
@@ -28,7 +39,6 @@ export default function DashboardPage() {
     const [sortBy, setSortBy] = useState<"newest" | "oldest" | "updated" | "az">("newest");
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [lockedFeature, setLockedFeature] = useState<FeatureName | null>(null);
-
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [editingBoard, setEditingBoard] = useState<Board | null>(null);
     const [editBoardTitle, setEditBoardTitle] = useState("");
@@ -36,10 +46,78 @@ export default function DashboardPage() {
     const [deletingBoardId, setDeletingBoardId] = useState<string | null>(null);
     const [isBoardActionSaving, setIsBoardActionSaving] = useState(false);
 
-    const { isAllowed } = useFeatureAccess();
+    // ── sidebar state ──
+    const [sidebarWidth, setSidebarWidth] = useState(280);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [activeBoardId, setActiveBoardId] = useState<string | null>(null);
+    const [activeNav, setActiveNav] = useState("Overview");
 
+    // ── main panel state ──
+    const [taskSearchQuery, setTaskSearchQuery] = useState("");
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+    // ── resize refs ──
+    const isResizingRef = useRef(false);
+    const startXRef = useRef(0);
+    const startWidthRef = useRef(280);
+
+    const { isAllowed } = useFeatureAccess();
     const { plan, limit, isAtLimit, isUnlimited } = usePlanLimits(boards.length);
 
+    // Sync activeBoardId to first board once boards load
+    useEffect(() => {
+        if (activeBoardId === null && boards.length > 0) {
+            setActiveBoardId(boards[0].id);
+        }
+    }, [boards, activeBoardId]);
+
+    // Resolve selected board
+    const selectedBoardId = activeBoardId ?? boards[0]?.id ?? "";
+    const selectedBoard = boards.find((b) => b.id === selectedBoardId) ?? null;
+
+    // Fetch full data for selected board (columns + tasks)
+    const { columns } = useBoard(selectedBoardId);
+
+    // ── stat computations ──
+    const allTasksFlat = useMemo(() => columns.flatMap((c) => c.tasks), [columns]);
+
+    const totalTasks = allTasksFlat.length;
+    const highPriorityTasks = allTasksFlat.filter((t) => t.priority === "high").length;
+
+    const dueThisWeek = useMemo(() => {
+        const now = new Date();
+        const dow = now.getDay();
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
+        monday.setHours(0, 0, 0, 0);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        sunday.setHours(23, 59, 59, 999);
+        return allTasksFlat.filter((t) => {
+            if (!t.due_date) return false;
+            const d = new Date(t.due_date);
+            return d >= monday && d <= sunday;
+        }).length;
+    }, [allTasksFlat]);
+
+    const lastColumn = columns.length > 0 ? columns[columns.length - 1] : null;
+    const allTasksWithColumn = useMemo(
+        () => columns.flatMap((col) => col.tasks.map((task) => ({ task, column: col }))),
+        [columns],
+    );
+    const filteredSortedTasks = useMemo(() => {
+        const q = taskSearchQuery.toLowerCase();
+        const filtered = q
+            ? allTasksWithColumn.filter(({ task }) => task.title.toLowerCase().includes(q))
+            : allTasksWithColumn;
+        return [...filtered].sort((a, b) =>
+            sortOrder === "asc"
+                ? a.task.title.localeCompare(b.task.title)
+                : b.task.title.localeCompare(a.task.title),
+        );
+    }, [allTasksWithColumn, taskSearchQuery, sortOrder]);
+
+    // ── legacy board filtering (kept for sort dialog) ──
     const filteredBoards = useMemo(() => {
         let result = [...boards];
         if (searchQuery.trim()) {
@@ -47,7 +125,7 @@ export default function DashboardPage() {
             result = result.filter(
                 (b) =>
                     b.title.toLowerCase().includes(q) ||
-                    (b.description ?? "").toLowerCase().includes(q)
+                    (b.description ?? "").toLowerCase().includes(q),
             );
         }
         switch (sortBy) {
@@ -59,11 +137,9 @@ export default function DashboardPage() {
         return result;
     }, [boards, searchQuery, sortBy]);
 
+    // ── handlers ──
     const handleCreateBoard = () => {
-        if (isAtLimit) {
-            setShowUpgradeModal(true);
-            return;
-        }
+        if (isAtLimit) { setShowUpgradeModal(true); return; }
         setNewBoardTitle("");
         setIsCreateBoardOpen(true);
     };
@@ -83,9 +159,7 @@ export default function DashboardPage() {
         try {
             await updateBoard(editingBoard.id, { title: editBoardTitle.trim(), color: editBoardColor || editingBoard.color });
             setEditingBoard(null);
-        } finally {
-            setIsBoardActionSaving(false);
-        }
+        } finally { setIsBoardActionSaving(false); }
     }
 
     async function handleDeleteBoardConfirm() {
@@ -94,11 +168,40 @@ export default function DashboardPage() {
         try {
             await deleteBoard(deletingBoardId);
             setDeletingBoardId(null);
-        } finally {
-            setIsBoardActionSaving(false);
-        }
+        } finally { setIsBoardActionSaving(false); }
     }
 
+    // ── resize ──
+    useEffect(() => {
+        const onMouseMove = (e: MouseEvent) => {
+            if (!isResizingRef.current) return;
+            const next = Math.min(320, Math.max(180, startWidthRef.current + (e.clientX - startXRef.current)));
+            setSidebarWidth(next);
+        };
+        const onMouseUp = () => { isResizingRef.current = false; };
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
+        return () => {
+            document.removeEventListener("mousemove", onMouseMove);
+            document.removeEventListener("mouseup", onMouseUp);
+        };
+    }, []);
+
+    // ── derived display ──
+    const initials = user
+        ? (user.firstName && user.lastName
+            ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
+            : (user.emailAddresses[0]?.emailAddress ?? "U").slice(0, 2).toUpperCase())
+        : "U";
+
+    const navItems: { id: string; icon: React.ElementType; label: string; locked?: boolean }[] = [
+        { id: "Overview",  icon: LayoutDashboard, label: "Overview" },
+        { id: "Tasks",     icon: CheckSquare,     label: "Tasks" },
+        { id: "Analytics", icon: BarChart2,        label: "Analytics", locked: plan === "free" },
+        { id: "Settings",  icon: Settings,         label: "Settings" },
+    ];
+
+    // ── loading / error guards ──
     if (loading) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -121,404 +224,417 @@ export default function DashboardPage() {
         );
     }
 
+    // ── sidebar inner (untouched) ──
+    const sidebarInner = (
+        <>
+            {/* Logo row */}
+            <div className="px-5 pt-6 pb-6 flex items-center justify-between">
+                <span className="text-2xl font-semibold text-[#1A1816]">TaskFlow</span>
+                {sidebarOpen && (
+                    <button
+                        onClick={() => setSidebarOpen(false)}
+                        className="md:hidden p-1 text-[#7A7872] hover:text-[#1A1816] transition-colors"
+                        aria-label="Close sidebar"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                )}
+            </div>
 
+            {/* Nav items */}
+            <nav className="flex flex-col">
+                {navItems.map(({ id, icon: Icon, label, locked }) => (
+                    <button
+                        key={id}
+                        onClick={() => {
+                            if (locked) { setShowUpgradeModal(true); return; }
+                            setActiveNav(id);
+                        }}
+                        className={`flex items-center gap-3 px-5 py-2.5 text-lg w-full transition-colors ${
+                            activeNav === id
+                                ? "font-medium text-[#1A1816]"
+                                : "text-[#7A7872] hover:text-[#1A1816]"
+                        }`}
+                    >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span className="flex-1 text-left">{label}</span>
+                        {locked && <Lock className="h-3 w-3 text-[#B0ADA6]" />}
+                    </button>
+                ))}
+            </nav>
+
+            {/* Boards section label */}
+            <div className="px-5 pt-5 pb-2 text-md font-bold tracking-normal uppercase text-[#B0ADA6]">
+                Boards
+            </div>
+
+            {/* Board list — scrollable */}
+            <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+                {boards.map((board, idx) => {
+                    const isActive = activeBoardId ? activeBoardId === board.id : idx === 0;
+                    return (
+                        <button
+                            key={board.id}
+                            onClick={() => setActiveBoardId(board.id)}
+                            className={`flex items-center py-2 w-full mx-0 transition-colors ${
+                                isActive ? "bg-[#F5F0E8]" : ""
+                            }`}
+                        >
+                            <div className={`flex items-center gap-3 px-5 w-full text-base ${
+                                isActive
+                                    ? "font-medium text-[#1A1816]"
+                                    : "text-[#7A7872] hover:text-[#1A1816]"
+                            }`}>
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${board.color}`} />
+                                <span className="truncate text-left">{board.title}</span>
+                            </div>
+                        </button>
+                    );
+                })}
+
+                <button
+                    onClick={handleCreateBoard}
+                    className="flex items-center gap-2 px-5 py-2 text-base font-semibold text-[#7F77DD] hover:text-[#6960C4] transition-colors w-full"
+                >
+                    <Plus className="h-3.5 w-3.5 shrink-0" />
+                    <span>New board</span>
+                </button>
+            </div>
+
+            {/* Log out — sits just above the boards count footer */}
+            <button
+                onClick={() => signOut({ redirectUrl: "/" })}
+                className="flex items-center gap-3 px-5 py-3 w-full text-sm text-[#7A7872] hover:text-[#1A1816] transition-colors border-t border-[#F0EBE2]"
+            >
+                <LogOut className="h-4 w-4 shrink-0" />
+                <span>Log out</span>
+            </button>
+
+            {/* Footer — pinned */}
+            <div className="border-t border-[#F0EBE2] px-5 pt-4 pb-5">
+                {plan === "free" ? (
+                    <>
+                        <div className="mb-3">
+                            <div className="flex justify-between text-xs text-[#7A7872] mb-1.5">
+                                <span>Boards</span>
+                                <span>{boards.length}/{isUnlimited ? "∞" : limit}</span>
+                            </div>
+                            <div className="h-1.5 bg-[#F0EBE2] rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-[#7F77DD] rounded-full transition-all duration-300"
+                                    style={{
+                                        width: `${isUnlimited ? 0 : Math.min(100, (boards.length / (limit as number)) * 100)}%`,
+                                    }}
+                                />
+                            </div>
+                        </div>
+                        <Button
+                            size="sm"
+                            onClick={() => setShowUpgradeModal(true)}
+                            className="w-full bg-[#7F77DD] hover:bg-[#6960C4] text-white text-sm font-medium"
+                        >
+                            Upgrade to Pro
+                        </Button>
+                    </>
+                ) : (
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-[#7F77DD] text-white flex items-center justify-center text-sm font-medium shrink-0">
+                            {initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-[#1A1816] truncate leading-tight">
+                                {user?.fullName ?? user?.emailAddresses[0]?.emailAddress}
+                            </p>
+                            <span className="inline-flex items-center text-[10px] font-semibold bg-[#E8E6FC] text-[#4A46A8] px-2 py-0.5 rounded-full mt-0.5">
+                                Pro plan
+                            </span>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </>
+    );
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <Navbar/>
+        <>
+            {/* Mobile backdrop — always in DOM, fades in/out so it doesn't flash */}
+            <div
+                className={`fixed inset-0 z-40 bg-black/30 md:hidden transition-opacity duration-200 ${
+                    sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+                }`}
+                onClick={() => setSidebarOpen(false)}
+            />
 
-            <main className="container mx-auto px-4 py-6 sm:py-8">
-                <div className="mb-6 sm:mb-8">
-                    <div className="flex items-center gap-3 mb-2">
-                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-                            Welcome back, {user?.firstName ?? user?.emailAddresses[0]?.emailAddress}! 👋
-                        </h1>
-                        {(plan === "pro" || plan === "enterprise") && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
-                                <Zap className="h-3 w-3" /> Pro
-                            </span>
-                        )}
-                        {plan === "free" && (
-                            <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-500">
-                                Free
-                            </span>
-                        )}
+            <div className="flex h-screen overflow-hidden">
+                {/* ── Sidebar (untouched) ── */}
+                <aside
+                    className={`flex flex-col bg-white border-r border-[#F0EBE2] h-full
+                        fixed md:relative
+                        inset-y-0 left-0
+                        z-50 md:z-auto
+                        shadow-xl md:shadow-none
+                        md:flex-shrink-0
+                        transition-transform duration-200
+                        ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+                    style={{ width: sidebarWidth }}
+                >
+                    {sidebarInner}
+
+                    {/* Resize drag handle */}
+                    <div
+                        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hidden md:block hover:bg-[#E8E2D8] transition-colors"
+                        onMouseDown={(e) => {
+                            isResizingRef.current = true;
+                            startXRef.current = e.clientX;
+                            startWidthRef.current = sidebarWidth;
+                            e.preventDefault();
+                        }}
+                    />
+                </aside>
+
+                {/* ── Main content area ── */}
+                <div className="flex-1 overflow-y-auto bg-[#F5F0E8]">
+
+                    {/* Topbar */}
+                    <div className="px-6 pt-6 pb-0 flex items-center gap-3 justify-between">
+                        {/* Hamburger — left side on mobile only */}
+                        <button
+                            className="md:hidden shrink-0"
+                            onClick={() => setSidebarOpen(true)}
+                            aria-label="Open sidebar"
+                        >
+                            <Menu className="h-5 w-5 text-[#1A1816]" />
+                        </button>
+                        {/* Title + subtitle */}
+                        <div className="flex-1 min-w-0">
+                            <h1 className="text-xl font-semibold text-[#1A1816] tracking-tight truncate">
+                                {selectedBoard?.title ?? "No board selected"}
+                            </h1>
+                            <p className="text-[12.5px] text-[#9C9890] mt-0.5">
+                                Overview of your selected board
+                            </p>
+                        </div>
+                        {/* Avatar — right side */}
+                        <UserButton />
                     </div>
-                    <p className="text-gray-600">
-                        Here&apos;s what&apos;s happening with your boards today.
-                    </p>
-                </div>
-                {/* Stats */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-                    <Card>
-                        <CardContent className="p-4 sm:p-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Total Boards</p>
-                                    <p className="text-2xl sm:text-3xl font-bold text-gray-900">{boards.length}</p>
-                                </div>
-                                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
-                                    <LayoutDashboard className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
-                                </div>
+
+                    {/* Toolbar */}
+                    <div className="px-6 pt-4 flex items-center justify-between">
+                        {/* Search */}
+                        <div className="flex items-center gap-2 bg-[#EDE9E0] rounded-[9px] px-3 py-2 flex-1 md:flex-none md:w-[380px] border border-transparent hover:border-[#C0B3E1] focus-within:border-[#C0B3E1] focus-within:bg-white transition-colors duration-150">
+                            <Search className="h-3.5 w-3.5 text-[#9C9890] shrink-0" />
+                            <input
+                                type="text"
+                                placeholder="Search tasks…"
+                                value={taskSearchQuery}
+                                onChange={(e) => setTaskSearchQuery(e.target.value)}
+                                className="bg-transparent outline-none border-none text-[12.5px] text-[#9C9890] placeholder:text-[#9C9890] w-full"
+                            />
+                        </div>
+                        {/* Sort + view toggle */}
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setSortOrder((o) => o === "asc" ? "desc" : "asc")}
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-[9px] text-[12px] border transition-colors duration-150 hover:bg-[#EDE9E0] hover:text-[#1A1816] active:bg-[#E4DFD8] ${
+                                    sortOrder !== "none"
+                                        ? "bg-[#EEEDFE] text-[#5A4A8B] border-[#C0B3E1]"
+                                        : "bg-[#EDE9E0] text-[#6B6860] border-transparent"
+                                }`}
+                            >
+                                <ArrowUpDown className="h-3.5 w-3.5" />
+                                <span className="hidden md:inline">{sortOrder === "asc" ? "Sort A→Z" : "Sort Z→A"}</span>
+                            </button>
+                            <div className="flex bg-[#EDE9E0] rounded-[9px] p-0.5 gap-0.5">
+                                <button
+                                    onClick={() => setViewMode("grid")}
+                                    className={`p-1.5 rounded-[7px] transition-colors duration-150 ${
+                                        viewMode === "grid" ? "bg-white text-[#1A1816] shadow-sm" : "text-[#9C9890] hover:bg-[#EDE9E0]"
+                                    }`}
+                                >
+                                    <LayoutGrid className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                    onClick={() => setViewMode("list")}
+                                    className={`p-1.5 rounded-[7px] transition-colors duration-150 ${
+                                        viewMode === "list" ? "bg-white text-[#1A1816] shadow-sm" : "text-[#9C9890] hover:bg-[#EDE9E0]"
+                                    }`}
+                                >
+                                    <List className="h-3.5 w-3.5" />
+                                </button>
                             </div>
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
 
-                    <Card>
-                        <CardContent className="p-4 sm:p-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Active This Week</p>
-                                    <p className="text-2xl sm:text-3xl font-bold text-gray-900">
-                                        {boards.filter((b) => {
-                                            const oneWeekAgo = new Date();
-                                            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-                                            return new Date(b.updated_at) > oneWeekAgo;
-                                        }).length}
-                                    </p>
-                                </div>
-                                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-green-100 rounded-xl flex items-center justify-center shrink-0">
-                                    <Rocket className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
-                                </div>
+                    {/* Stat cards */}
+                    <div className="px-6 pt-4 grid grid-cols-3 gap-3">
+                        {/* Green — total tasks */}
+                        <div className="rounded-2xl p-5 bg-[#A9C2AA]">
+                            <div className="w-8 h-8 rounded-[9px] bg-[#4A7A4C] flex items-center justify-center mb-2.5">
+                                <Kanban className="h-4 w-4 text-white" />
                             </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardContent className="p-4 sm:p-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Plan Usage</p>
-                                    <p className="text-2xl sm:text-3xl font-bold text-gray-900">
-                                        {isUnlimited ? `${boards.length}/∞` : `${boards.length}/${limit}`}
-                                    </p>
-                                </div>
-                                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-purple-100 rounded-xl flex items-center justify-center shrink-0">
-                                    <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
-                                </div>
+                            <div className="text-[11px] font-semibold text-[#1A1816] opacity-65 mb-1.5">Total tasks</div>
+                            <div className="flex items-baseline">
+                                <span className="text-[26px] font-bold text-[#1A1816] tracking-tight">{totalTasks}</span>
+                                <span className="text-[11px] text-[#1A1816] opacity-50 ml-1">in this board</span>
                             </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardContent className="p-4 sm:p-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Current Plan</p>
-                                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 capitalize">{plan === "enterprise" ? "Pro" : plan}</p>
-                                </div>
-                                <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center shrink-0 ${
-                                    plan === "pro" || plan === "enterprise" ? "bg-yellow-100" : "bg-gray-100"
-                                }`}>
-                                    {plan === "pro" || plan === "enterprise"
-                                        ? <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500" />
-                                        : <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-gray-500" />
-                                    }
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Boards */}
-
-                <div className=" mb-6 sm:mb-8">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 space-y-4 sm:space-y-0">
-                        <div>
-                            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
-                                Your Boards</h2>
-                            <p className="text-gray-600">
-                                Manage your projects and tasks</p>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row items-start gap-2 sm:gap-3">
-                            <div className="flex items-center gap-1 bg-white border rounded-md p-1">
-                                <Button variant={viewMode === "grid" ? "default" : "ghost"}
-                                size="sm"
-                                onClick={() => setViewMode("grid")}>
-                                    <Grid3X3/>
-                                </Button>
-                                <Button variant={viewMode === "list" ? "default" : "ghost"}
-                                size="sm"
-                                onClick={() => setViewMode("list")}>
-                                    <List/>
-                                </Button>
+                        {/* Rose — high priority */}
+                        <div className="rounded-2xl p-5 bg-[#D18B8B]">
+                            <div className="w-8 h-8 rounded-[9px] bg-[#8B3A3A] flex items-center justify-center mb-2.5">
+                                <AlertTriangle className="h-4 w-4 text-white" />
                             </div>
+                            <div className="text-[11px] font-semibold text-[#1A1816] opacity-65 mb-1.5">High priority</div>
+                            <div className="flex items-baseline">
+                                <span className="text-[26px] font-bold text-[#1A1816] tracking-tight">{highPriorityTasks}</span>
+                                <span className="text-[11px] text-[#1A1816] opacity-50 ml-1">tasks</span>
+                            </div>
+                        </div>
 
-                            <Button variant="outline" onClick={() => setIsFilterOpen(true)} className={sortBy !== "newest" ? "border-blue-400 text-blue-600 bg-blue-50" : ""}>
-                                <Filter className="h-4 w-4 mr-1"/>
-                                Sort
-                                {sortBy !== "newest" && <span className="ml-1 h-2 w-2 rounded-full bg-blue-500 inline-block" />}
-                            </Button>
+                        {/* Lavender — due this week */}
+                        <div className="rounded-2xl p-5 bg-[#C0B3E1]">
+                            <div className="w-8 h-8 rounded-[9px] bg-[#5A4A8B] flex items-center justify-center mb-2.5">
+                                <CalendarDays className="h-4 w-4 text-white" />
+                            </div>
+                            <div className="text-[11px] font-semibold text-[#1A1816] opacity-65 mb-1.5">Due this week</div>
+                            <div className="flex items-baseline">
+                                <span className="text-[26px] font-bold text-[#1A1816] tracking-tight">{dueThisWeek}</span>
+                                <span className="text-[11px] text-[#1A1816] opacity-50 ml-1">tasks</span>
+                            </div>
+                        </div>
+                    </div>
 
-                            <div className="flex flex-col items-start gap-1">
-                                <Button onClick={handleCreateBoard}>
-                                    <Plus/>
-                                    Create Board
-                                </Button>
-                                <p className={`text-xs ${isAtLimit ? "text-rose-600 font-medium" : "text-gray-400"}`}>
-                                    {isUnlimited ? `${boards.length}/∞ boards used` : `${boards.length}/${limit} boards used`}
+                    {/* Task list */}
+                    <div className="px-6 pt-4 pb-6">
+                        {/* Section header */}
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-[13px] font-semibold text-[#1A1816]">Tasks</span>
+                            <span className="text-[12px] text-[#9C9890] flex items-center gap-1">
+                                <Kanban className="h-3 w-3" />
+                                {selectedBoard?.title ?? "—"} · {columns.length} column{columns.length !== 1 ? "s" : ""}
+                            </span>
+                        </div>
+
+                        {allTasksWithColumn.length === 0 ? (
+                            /* Empty state — board has no tasks */
+                            <div className="flex flex-col items-center justify-center py-12 text-center">
+                                <Kanban className="h-8 w-8 text-[#D4CFC6] mb-3" />
+                                <p className="text-[13px] text-[#9C9890]">No tasks yet</p>
+                                <p className="text-[11.5px] text-[#B0ADA6] mt-1">
+                                    Open the board to add your first task
                                 </p>
                             </div>
-                        </div>
-                    </div>
-
-                    {/* Search Bar */}
-                    <div className="relative mb-4 sm:mb-6">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                        <Input
-                            placeholder="Search boards..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-10 pr-9"
-                        />
-                        {searchQuery && (
-                            <button
-                                onClick={() => setSearchQuery("")}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
-                        )}
-                    </div>
-
-
-                    {/* Boards Grid/List */}
-
-                    {boards.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-20 text-center">
-                            <div className="h-16 w-16 rounded-2xl bg-blue-100 flex items-center justify-center mb-5">
-                                <LayoutDashboard className="h-8 w-8 text-blue-600" />
-                            </div>
-                            <h3 className="text-xl font-semibold text-gray-900 mb-2">No boards yet</h3>
-                            <p className="text-gray-500 max-w-sm mb-1">
-                                Create your first board to start organizing tasks and tracking your projects.
+                        ) : filteredSortedTasks.length === 0 ? (
+                            /* Empty state — search returned nothing */
+                            <p className="text-[12.5px] text-[#9C9890] text-center py-4">
+                                No tasks match your search
                             </p>
-                            <p className="text-sm text-gray-400 mb-7">
-                                Each board comes with 4 default columns: To Do, In Progress, Review, and Done.
-                            </p>
-                            <Button size="lg" onClick={handleCreateBoard}>
-                                <Plus className="h-5 w-5 mr-2" />
-                                Create your first board
-                            </Button>
-                        </div>
-                    ) : filteredBoards.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 text-center">
-                            <Search className="h-10 w-10 text-gray-300 mb-3" />
-                            <p className="text-gray-500 font-medium">No boards match your search</p>
-                            <button onClick={() => { setSearchQuery(""); setSortBy("newest"); }} className="text-sm text-blue-500 hover:underline mt-1">
-                                Clear filters
-                            </button>
-                        </div>
-                    ) : viewMode === "grid" ? (
-
-                        //grid view
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg-grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-                        {filteredBoards.map((board) => (
-                            <div key={board.id} className="relative group">
-                                <Link href={`/boards/${board.id}`}>
-                                    <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                                        <CardHeader className="pb-3">
-                                            <div className="flex items-center">
-                                                <div className={`w-4 h-4 ${board.color} rounded`} />
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent className="p-4 sm:p-6">
-                                            <CardTitle className="text-base sm:text-lg mb-2 group-hover:text-blue-600 transition-colors">
-                                                {board.title}
-                                            </CardTitle>
-                                            <CardDescription className="text-sm mb-4">
-                                                {board.description}
-                                            </CardDescription>
-                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-gray-500 space-y-1 sm:space-y-0">
-                                                <span>Created {new Date(board.created_at).toLocaleDateString()}</span>
-                                                <span>Updated {new Date(board.updated_at).toLocaleDateString()}</span>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </Link>
-                                {/* Three-dot menu */}
-                                <div className="absolute top-3 right-3 z-10">
-                                    <button
-                                        onClick={(e) => { e.preventDefault(); setOpenMenuId(openMenuId === board.id ? null : board.id); }}
-                                        className="h-7 w-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        ) : viewMode === "grid" ? (
+                            /* Grid view */
+                            <div className="grid grid-cols-2 gap-3">
+                                {filteredSortedTasks.map(({ task, column }) => (
+                                    <div
+                                        key={task.id}
+                                        className="bg-white rounded-xl border border-[#E8E2D5] p-4 cursor-pointer hover:border-[#CFC9BE] transition-colors"
                                     >
-                                        <MoreHorizontal className="h-4 w-4" />
-                                    </button>
-                                    {openMenuId === board.id && (
-                                        <>
-                                            <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
-                                            <div className="absolute right-0 top-8 z-50 bg-white rounded-lg shadow-lg border py-1 min-w-[140px]">
-                                                <button
-                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
-                                                    onClick={() => { setEditingBoard(board); setEditBoardTitle(board.title); setEditBoardColor(board.color); setOpenMenuId(null); }}
-                                                >
-                                                    <Pencil className="h-3.5 w-3.5 text-gray-500" /> Edit
-                                                </button>
-                                                <button
-                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-red-50 flex items-center gap-2 text-red-600"
-                                                    onClick={() => { setDeletingBoardId(board.id); setOpenMenuId(null); }}
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5" /> Delete
-                                                </button>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-
-                        <Card
-                            onClick={handleCreateBoard}
-                            className="border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group"
-                        >
-                            <CardContent className="p-4 sm:p-6 flex flex-col items-center justify-center h-full min-h-[150px]">
-                                <Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2"/>
-                                <p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">Create new board</p>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    ) : (
-                        //list view
-                    <div>
-                        {filteredBoards.map((board, idx) => (
-                            <div key={board.id} className={`relative group ${idx > 0 ? "mt-4" : ""}`}>
-                                <Link href={`/boards/${board.id}`}>
-                                    <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                                        <CardHeader className="pb-3">
-                                            <div className="flex items-center">
-                                                <div className={`w-4 h-4 ${board.color} rounded`} />
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent className="p-4 sm:p-6">
-                                            <CardTitle className="text-base sm:text-lg mb-2 group-hover:text-blue-600 transition-colors">
-                                                {board.title}
-                                            </CardTitle>
-                                            <CardDescription className="text-sm mb-4">
-                                                {board.description}
-                                            </CardDescription>
-                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-gray-500 space-y-1 sm:space-y-0">
-                                                <span>Created {new Date(board.created_at).toLocaleDateString()}</span>
-                                                <span>Updated {new Date(board.updated_at).toLocaleDateString()}</span>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </Link>
-                                {/* Three-dot menu */}
-                                <div className="absolute top-3 right-3 z-10">
-                                    <button
-                                        onClick={(e) => { e.preventDefault(); setOpenMenuId(openMenuId === board.id ? null : board.id); }}
-                                        className="h-7 w-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                        <MoreHorizontal className="h-4 w-4" />
-                                    </button>
-                                    {openMenuId === board.id && (
-                                        <>
-                                            <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
-                                            <div className="absolute right-0 top-8 z-50 bg-white rounded-lg shadow-lg border py-1 min-w-[140px]">
-                                                <button
-                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
-                                                    onClick={() => { setEditingBoard(board); setEditBoardTitle(board.title); setEditBoardColor(board.color); setOpenMenuId(null); }}
-                                                >
-                                                    <Pencil className="h-3.5 w-3.5 text-gray-500" /> Edit
-                                                </button>
-                                                <button
-                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-red-50 flex items-center gap-2 text-red-600"
-                                                    onClick={() => { setDeletingBoardId(board.id); setOpenMenuId(null); }}
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5" /> Delete
-                                                </button>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-
-                        <Card onClick={handleCreateBoard} className="mt-4 border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
-                            <CardContent className="p-4 sm:p-6 flex flex-col items-center justify-center h-full min-h-[200px]">
-                                <Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2"/>
-                                <p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">Create new board</p>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    )}
-                </div>
-
-                {/* Analytics shortcut for Pro/Enterprise */}
-                {isAllowed("analytics") && (
-                    <div className="mb-6">
-                        <Link href="/dashboard/analytics">
-                            <Card className="hover:shadow-md transition-shadow cursor-pointer border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50">
-                                <CardContent className="p-4 flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="h-10 w-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
-                                            <BarChart3 className="h-5 w-5 text-blue-600" />
-                                        </div>
-                                        <div>
-                                            <p className="font-semibold text-gray-900 text-sm">Analytics Dashboard</p>
-                                            <p className="text-xs text-gray-500">Track task progress, priorities, and productivity trends</p>
+                                        <p className="text-[13px] font-medium text-[#1A1816] mb-2 truncate">
+                                            {task.title}
+                                        </p>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-[10.5px] text-[#9C9890] bg-[#F5F0E8] px-2 py-0.5 rounded-md">
+                                                {column.title}
+                                            </span>
+                                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                                task.priority === "high"
+                                                    ? "bg-[#FDEAEA] text-[#A32D2D]"
+                                                    : task.priority === "medium"
+                                                    ? "bg-[#FDF0E0] text-[#8A4A00]"
+                                                    : "bg-[#E8F5EE] text-[#1B5E3B]"
+                                            }`}>
+                                                {task.priority}
+                                            </span>
+                                            <span className={`text-[11px] flex items-center gap-1 ${
+                                                task.due_date ? "text-[#B0ADA6]" : "text-[#D4CFC6]"
+                                            }`}>
+                                                <Calendar className="h-3 w-3" />
+                                                {task.due_date
+                                                    ? new Date(task.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                                                    : "No date"}
+                                            </span>
                                         </div>
                                     </div>
-                                    <ArrowRight className="h-4 w-4 text-gray-400 shrink-0" />
-                                </CardContent>
-                            </Card>
-                        </Link>
-                    </div>
-                )}
-
-                {/* Locked Pro feature hints */}
-                {(!isAllowed("analytics") || !isAllowed("export")) && (
-                    <div className="mb-8">
-                        <div className="flex items-center justify-between mb-4">
-                            <div>
-                                <h3 className="text-base font-semibold text-gray-800">Unlock more features</h3>
-                                <p className="text-sm text-gray-400 mt-0.5">Upgrade your plan to access powerful tools</p>
+                                ))}
                             </div>
-                            <Link href="/pricing" className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors">
-                                View plans →
-                            </Link>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {!isAllowed("analytics") && (
-                                <LockedFeatureCard
-                                    feature="analytics"
-                                    icon={<BarChart3 className="h-4 w-4" />}
-                                    description="Track board activity and task trends"
-                                    onUnlock={setLockedFeature}
-                                />
-                            )}
-                            {!isAllowed("export") && (
-                                <LockedFeatureCard
-                                    feature="export"
-                                    icon={<Download className="h-4 w-4" />}
-                                    description="Export your boards and tasks to CSV"
-                                    onUnlock={setLockedFeature}
-                                />
+                        ) : (
+                            /* List view */
+                            filteredSortedTasks.map(({ task, column }) => (
+                                <div
+                                    key={task.id}
+                                    className="bg-white rounded-xl border border-[#E8E2D5] px-4 py-3 flex items-center gap-3 mb-2 cursor-pointer hover:border-[#CFC9BE] transition-colors"
+                                >
+                                    <span className="text-[13px] font-medium text-[#1A1816] flex-1 truncate">
+                                        {task.title}
+                                    </span>
+                                    <span className="text-[10.5px] text-[#9C9890] bg-[#F5F0E8] px-2 py-0.5 rounded-md shrink-0">
+                                        {column.title}
+                                    </span>
+                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                                        task.priority === "high"
+                                            ? "bg-[#FDEAEA] text-[#A32D2D]"
+                                            : task.priority === "medium"
+                                            ? "bg-[#FDF0E0] text-[#8A4A00]"
+                                            : "bg-[#E8F5EE] text-[#1B5E3B]"
+                                    }`}>
+                                        {task.priority}
+                                    </span>
+                                    <span className={`text-[11px] flex items-center gap-1 shrink-0 ${
+                                        task.due_date ? "text-[#B0ADA6]" : "text-[#D4CFC6]"
+                                    }`}>
+                                        <Calendar className="h-3 w-3" />
+                                        {task.due_date
+                                            ? new Date(task.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                                            : "No date"}
+                                    </span>
+                                </div>
+                            ))
+                        )}
+
+                        {/* Bottom action buttons */}
+                        <div className="flex gap-2.5 mt-3">
+                            <button
+                                onClick={() => selectedBoard && router.push(`/boards/${selectedBoard.id}`)}
+                                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-[10px] bg-[#2D2926] text-white text-[12.5px] font-medium cursor-pointer hover:bg-[#1F1C19] transition-colors duration-150"
+                            >
+                                <Kanban className="h-4 w-4" />
+                                Open full board
+                            </button>
+
+                            {(plan === "pro" || plan === "enterprise") && selectedBoard && (
+                                <button
+                                    onClick={() => exportBoardToCsv(selectedBoard.title, columns)}
+                                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] bg-[#EDE9E0] text-[#1A1816] text-[12.5px] font-medium cursor-pointer hover:bg-[#E0DBD0] transition-colors"
+                                >
+                                    <Download className="h-4 w-4" />
+                                    Export CSV
+                                </button>
                             )}
                         </div>
                     </div>
-                )}
-            </main>
+                </div>
+            </div>
 
-            {/* Sort / Filter Dialog */}
+            {/* ── Dialogs (unchanged) ── */}
+
             <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
                 <DialogContent className="w-[95vw] max-w-sm mx-auto">
-                    <DialogHeader>
-                        <DialogTitle>Sort Boards</DialogTitle>
-                    </DialogHeader>
+                    <DialogHeader><DialogTitle>Sort Boards</DialogTitle></DialogHeader>
                     <div className="flex flex-col gap-2 mt-1">
-                        {(
-                            [
-                                { value: "newest",  label: "Newest first" },
-                                { value: "oldest",  label: "Oldest first" },
-                                { value: "updated", label: "Recently updated" },
-                                { value: "az",      label: "A → Z" },
-                            ] as const
-                        ).map((opt) => (
+                        {([
+                            { value: "newest",  label: "Newest first" },
+                            { value: "oldest",  label: "Oldest first" },
+                            { value: "updated", label: "Recently updated" },
+                            { value: "az",      label: "A → Z" },
+                        ] as const).map((opt) => (
                             <button
                                 key={opt.value}
                                 onClick={() => { setSortBy(opt.value); setIsFilterOpen(false); }}
@@ -544,12 +660,9 @@ export default function DashboardPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Create Board Dialog */}
             <Dialog open={isCreateBoardOpen} onOpenChange={setIsCreateBoardOpen}>
                 <DialogContent className="w-[95vw] max-w-sm mx-auto">
-                    <DialogHeader>
-                        <DialogTitle>New Board</DialogTitle>
-                    </DialogHeader>
+                    <DialogHeader><DialogTitle>New Board</DialogTitle></DialogHeader>
                     <form onSubmit={handleSubmitCreateBoard} className="flex flex-col gap-4 mt-2">
                         <div className="flex flex-col gap-1.5">
                             <Label htmlFor="board-title">Board name</Label>
@@ -562,57 +675,50 @@ export default function DashboardPage() {
                             />
                         </div>
                         <div className="flex justify-end gap-2">
-                            <Button type="button" variant="ghost" onClick={() => setIsCreateBoardOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={!newBoardTitle.trim()}>
-                                Create Board
-                            </Button>
+                            <Button type="button" variant="ghost" onClick={() => setIsCreateBoardOpen(false)}>Cancel</Button>
+                            <Button type="submit" disabled={!newBoardTitle.trim()}>Create Board</Button>
                         </div>
                     </form>
                 </DialogContent>
             </Dialog>
 
-            {/* Upgrade Modal */}
             <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
-                <DialogContent className="w-[95vw] max-w-md mx-auto text-center">
-                    <DialogHeader>
-                        <div className="flex justify-center mb-3">
-                            <div className="h-12 w-12 rounded-full flex items-center justify-center bg-yellow-100">
-                                <Zap className="h-6 w-6 text-yellow-500" />
-                            </div>
+                <DialogPortal>
+                    <DialogOverlay className="!bg-black/40 backdrop-blur-sm" />
+                    <RadixDialog.Content className="fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-sm bg-white rounded-2xl shadow-xl border border-[#EDE9E0] p-6 text-center outline-none">
+                        <DialogClose className="absolute top-4 right-4 text-[#9C9890] hover:text-[#1A1816] transition-colors">
+                            <X className="w-4 h-4" />
+                            <span className="sr-only">Close</span>
+                        </DialogClose>
+                        <div className="w-12 h-12 rounded-full bg-[#EEEDFE] flex items-center justify-center mx-auto mb-4">
+                            <Sparkles className="w-5 h-5 text-[#5A4A8B]" />
                         </div>
-                        <DialogTitle className="text-xl">
-                            Upgrade to Pro
-                        </DialogTitle>
-                        <p className="text-sm text-gray-600 mt-1">
+                        <DialogTitle className="text-[18px] font-semibold text-[#1A1816] mb-2">Upgrade to Pro</DialogTitle>
+                        <p className="text-[13px] text-[#9C9890] leading-relaxed mb-1">
                             You&apos;ve reached your Free plan limit of <strong>{limit} boards</strong>.
                         </p>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-[13px] text-[#9C9890] leading-relaxed mb-5">
                             Upgrade to Pro for unlimited boards, analytics, CSV export, and more.
                         </p>
-                    </DialogHeader>
-                    <div className="flex flex-col gap-2 mt-4">
-                        <Link href="/pricing">
-                            <Button className="w-full font-semibold text-white bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600">
-                                <Zap className="h-4 w-4 mr-2" />
-                                View Plans
-                            </Button>
+                        <Link
+                            href="/pricing"
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium text-white bg-[#5A4A8B] hover:bg-[#4A3A7B] transition-colors"
+                        >
+                            <Sparkles className="w-4 h-4" />
+                            View Plans
                         </Link>
-                        <Button variant="ghost" className="w-full" onClick={() => setShowUpgradeModal(false)}>
+                        <button onClick={() => setShowUpgradeModal(false)} className="w-full mt-3 px-4 py-2.5 rounded-xl text-[13px] font-medium text-[#5A5753] bg-[#F5F0E8] hover:bg-[#EDE9E0] border border-[#EDE9E0] transition-colors">
                             Maybe Later
-                        </Button>
-                    </div>
-                </DialogContent>
+                        </button>
+                    </RadixDialog.Content>
+                </DialogPortal>
             </Dialog>
+
             <FeatureUpgradeModal feature={lockedFeature} onClose={() => setLockedFeature(null)} />
 
-            {/* Edit Board Dialog */}
             <Dialog open={!!editingBoard} onOpenChange={(open) => { if (!open) setEditingBoard(null); }}>
                 <DialogContent className="w-[95vw] max-w-[425px] mx-auto">
-                    <DialogHeader>
-                        <DialogTitle>Edit Board</DialogTitle>
-                    </DialogHeader>
+                    <DialogHeader><DialogTitle>Edit Board</DialogTitle></DialogHeader>
                     <form className="space-y-4" onSubmit={handleEditBoardSubmit}>
                         <div className="space-y-2">
                             <Label htmlFor="editBoardTitle">Board Title</Label>
@@ -643,9 +749,7 @@ export default function DashboardPage() {
                             </div>
                         </div>
                         <div className="flex justify-end space-x-2">
-                            <Button type="button" variant="outline" onClick={() => setEditingBoard(null)}>
-                                Cancel
-                            </Button>
+                            <Button type="button" variant="outline" onClick={() => setEditingBoard(null)}>Cancel</Button>
                             <Button type="submit" disabled={isBoardActionSaving}>
                                 {isBoardActionSaving ? "Saving..." : "Save Changes"}
                             </Button>
@@ -654,7 +758,6 @@ export default function DashboardPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Delete Board Confirm Dialog */}
             <Dialog open={!!deletingBoardId} onOpenChange={(open) => { if (!open) setDeletingBoardId(null); }}>
                 <DialogContent className="w-[95vw] max-w-sm mx-auto text-center">
                     <DialogHeader>
@@ -683,6 +786,6 @@ export default function DashboardPage() {
                     </div>
                 </DialogContent>
             </Dialog>
-        </div>
-    )
+        </>
+    );
 }

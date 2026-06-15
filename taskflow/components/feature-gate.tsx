@@ -1,8 +1,9 @@
 "use client";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogOverlay, DialogPortal, DialogTitle } from "@/components/ui/dialog";
+import { Dialog as RadixDialog } from "radix-ui";
 import { Button } from "@/components/ui/button";
-import { Lock, Zap } from "lucide-react";
+import { Lock, Sparkles, X, Zap } from "lucide-react";
 import Link from "next/link";
 import { FeatureName, featureLabels, featureRequiredPlan } from "@/lib/config/featureMatrix";
 
@@ -124,30 +125,33 @@ export function FeatureUpgradeModal({ feature, onClose }: FeatureUpgradeModalPro
 
   return (
     <Dialog open={!!feature} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="w-[95vw] max-w-sm mx-auto text-center">
-        <DialogHeader>
-          <div className="flex justify-center mb-3">
-            <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-              <Lock className="h-6 w-6 text-blue-500" />
-            </div>
+      <DialogPortal>
+        <DialogOverlay className="!bg-black/40 backdrop-blur-sm" />
+        <RadixDialog.Content className="fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 outline-none bg-white rounded-2xl shadow-xl border border-[#EDE9E0] p-6 w-full max-w-sm mx-auto text-center">
+          <DialogClose className="absolute top-4 right-4 text-[#9C9890] hover:text-[#1A1816] transition-colors">
+            <X className="w-4 h-4" />
+            <span className="sr-only">Close</span>
+          </DialogClose>
+          <div className="w-12 h-12 rounded-full bg-[#EEEDFE] flex items-center justify-center mx-auto mb-4">
+            <Sparkles className="w-5 h-5 text-[#5A4A8B]" />
           </div>
-          <DialogTitle className="text-xl">{label} is locked</DialogTitle>
-          <p className="text-sm text-gray-600 mt-1">
+          <DialogTitle className="text-[18px] font-semibold text-[#1A1816] mb-2">{label} is locked</DialogTitle>
+          <p className="text-[13px] text-[#9C9890] leading-relaxed mb-5">
             This feature requires the <strong>{required}</strong> plan or higher.
           </p>
-        </DialogHeader>
-        <div className="flex flex-col gap-2 mt-4">
-          <Link href="/pricing" onClick={onClose}>
-            <Button className="w-full font-semibold">
-              <Zap className="h-4 w-4 mr-2" />
-              View Plans
-            </Button>
+          <Link
+            href="/pricing"
+            onClick={onClose}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium text-white bg-[#5A4A8B] hover:bg-[#4A3A7B] transition-colors"
+          >
+            <Sparkles className="w-4 h-4" />
+            View Plans
           </Link>
-          <Button variant="ghost" className="w-full" onClick={onClose}>
+          <button onClick={onClose} className="w-full mt-3 px-4 py-2.5 rounded-xl text-[13px] font-medium text-[#5A5753] bg-[#F5F0E8] hover:bg-[#EDE9E0] border border-[#EDE9E0] transition-colors block text-center">
             Maybe Later
-          </Button>
-        </div>
-      </DialogContent>
+          </button>
+        </RadixDialog.Content>
+      </DialogPortal>
     </Dialog>
   );
 }
