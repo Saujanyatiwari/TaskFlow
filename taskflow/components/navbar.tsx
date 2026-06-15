@@ -21,7 +21,6 @@ export default function Navbar( {boardTitle , onEditBoard , onFilterClick , filt
     const {isSignedIn , user} = useUser();
     const pathname = usePathname();
 
-    console.log("pathname:", pathname);
 
     // const isHomePage = pathname === "/";
     const isDashboardPage = pathname === "/dashboard";
@@ -68,7 +67,7 @@ export default function Navbar( {boardTitle , onEditBoard , onFilterClick , filt
     if(isBoardPage){
         return (
             <header className="bg-white border-b sticky top-0 z-50">
-                <div className="conatiner mx-auto px-4 py-3 sm:py-4">
+                <div className="container mx-auto px-4 py-3 sm:py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
                             <Link 

@@ -6,37 +6,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { usePlanLimits } from "@/lib/hooks/usePlanLimits";
 import { useUser } from "@clerk/nextjs";
-import { Check, Zap, Building2 } from "lucide-react";
+import { Check, Zap } from "lucide-react";
 import Link from "next/link";
 
 const FREE_FEATURES = [
-  "Up to 3 boards",
-  "4 columns per board",
-  "Unlimited tasks",
-  "Drag & drop kanban",
-  "Priority & date filtering",
-  "Task search",
-  "Due date tracking",
+  "3 boards",
+  "Drag & drop",
+  "Filters & search",
+  "Basic kanban",
 ];
 
 const PRO_FEATURES = [
-  "Everything in Free",
-  "Up to 20 boards",
-  "Team collaboration",
-  "Advanced analytics",
-  "Custom column templates",
-  "Export to CSV",
-  "Priority support",
-];
-
-const ENTERPRISE_FEATURES = [
-  "Everything in Pro",
   "Unlimited boards",
-  "Unlimited workspaces",
-  "Custom integrations",
-  "Dedicated account manager",
-  "SSO / SAML support",
-  "SLA & uptime guarantee",
+  "Analytics dashboard",
+  "CSV export",
+  "Priority support",
 ];
 
 export default function PricingPage() {
@@ -56,12 +40,6 @@ export default function PricingPage() {
           <p className="text-lg text-gray-600 max-w-xl mx-auto">
             Start free. Upgrade when you need more. No hidden fees.
           </p>
-          {plan === "enterprise" && (
-            <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-purple-100 px-4 py-1.5 text-sm font-medium text-purple-700">
-              <Building2 className="h-4 w-4" />
-              You are on the Enterprise plan
-            </div>
-          )}
           {plan === "pro" && (
             <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-yellow-100 px-4 py-1.5 text-sm font-medium text-yellow-700">
               <Zap className="h-4 w-4" />
@@ -71,7 +49,7 @@ export default function PricingPage() {
         </div>
 
         {/* Plan Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
 
           {/* Free Plan */}
           <Card className={plan === "free" ? "ring-2 ring-blue-500" : ""}>
@@ -150,47 +128,6 @@ export default function PricingPage() {
                 <Button className="w-full bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-white font-semibold">
                   <Zap className="h-4 w-4 mr-2" />
                   Upgrade to Pro — Coming Soon
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Enterprise Plan */}
-          <Card className={`bg-gradient-to-b from-purple-900 to-indigo-900 text-white border-purple-700 ${plan === "enterprise" ? "ring-2 ring-purple-400" : ""}`}>
-            <CardHeader className="pb-4">
-              <div className="mb-3 h-6">
-                {plan === "enterprise" ? (
-                  <Badge className="bg-purple-400 text-white text-xs">Current Plan</Badge>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/40 border border-purple-400/50 px-3 py-1 text-xs font-semibold text-purple-200">
-                    <Building2 className="h-3 w-3" /> For Teams
-                  </span>
-                )}
-              </div>
-              <CardTitle className="text-xl text-white">Enterprise</CardTitle>
-              <div className="mt-2 flex items-end gap-1">
-                <span className="text-4xl font-bold text-white">Custom</span>
-              </div>
-              <p className="text-sm text-purple-300">For teams and organizations</p>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-3 mb-6">
-                {ENTERPRISE_FEATURES.map((feature) => (
-                  <li key={feature} className="flex items-center gap-2 text-sm text-purple-100">
-                    <Check className="h-4 w-4 text-purple-300 shrink-0" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              {plan === "enterprise" ? (
-                <Button disabled className="w-full bg-purple-400 text-white font-semibold opacity-80">
-                  <Building2 className="h-4 w-4 mr-2" />
-                  Current Plan
-                </Button>
-              ) : (
-                <Button className="w-full bg-purple-500 hover:bg-purple-400 text-white font-semibold border border-purple-400">
-                  <Building2 className="h-4 w-4 mr-2" />
-                  Contact Sales
                 </Button>
               )}
             </CardContent>

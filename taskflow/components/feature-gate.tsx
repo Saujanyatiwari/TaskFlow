@@ -115,6 +115,10 @@ interface FeatureUpgradeModalProps {
 export function FeatureUpgradeModal({ feature, onClose }: FeatureUpgradeModalProps) {
   if (!feature) return null;
 
+  // aiFeatures is enterprise-only and enterprise is not a public tier —
+  // nothing to show users; close silently.
+  if (feature === "aiFeatures") return null;
+
   const required = featureRequiredPlan[feature];
   const label = featureLabels[feature];
 

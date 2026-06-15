@@ -23,6 +23,8 @@ export const featureMatrix = {
     export:     true,
     aiFeatures: false,
   },
+  // enterprise is not a visible plan tier but the type is kept so existing
+  // code paths (AI route, planCheck) continue to compile without changes.
   enterprise: {
     boards:     true,
     dnd:        true,

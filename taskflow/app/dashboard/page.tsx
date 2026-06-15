@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBoards } from "@/lib/hooks/useBoards";
 import { useUser } from "@clerk/nextjs";
-import { Activity, ArrowRight, BarChart3, Bot, Download, Filter, Grid3X3, LayoutDashboard, List, Loader2, Plus, Rocket, Search, X, Zap } from "lucide-react";
+import { Activity, ArrowRight, BarChart3, Download, Filter, Grid3X3, LayoutDashboard, List, Loader2, Plus, Rocket, Search, X, Zap } from "lucide-react";
 import Link from "next/link";
 import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -102,11 +102,6 @@ export default function DashboardPage() {
                         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
                             Welcome back, {user?.firstName ?? user?.emailAddresses[0]?.emailAddress}! 👋
                         </h1>
-                        {plan === "enterprise" && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700">
-                                🏢 Enterprise
-                            </span>
-                        )}
                         {plan === "pro" && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
                                 <Zap className="h-3 w-3" /> Pro
@@ -179,14 +174,12 @@ export default function DashboardPage() {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs sm:text-sm font-medium text-gray-500 mb-1">Current Plan</p>
-                                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 capitalize">{plan}</p>
+                                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 capitalize">{plan === "enterprise" ? "Pro" : plan}</p>
                                 </div>
                                 <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center shrink-0 ${
-                                    plan === "enterprise" ? "bg-purple-100" : plan === "pro" ? "bg-yellow-100" : "bg-gray-100"
+                                    plan === "pro" || plan === "enterprise" ? "bg-yellow-100" : "bg-gray-100"
                                 }`}>
-                                    {plan === "enterprise"
-                                        ? <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
-                                        : plan === "pro"
+                                    {plan === "pro" || plan === "enterprise"
                                         ? <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500" />
                                         : <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-gray-500" />
                                     }
@@ -413,8 +406,8 @@ export default function DashboardPage() {
                     </div>
                 )}
 
-                {/* Locked Pro/Enterprise feature hints */}
-                {(!isAllowed("analytics") || !isAllowed("aiFeatures")) && (
+                {/* Locked Pro feature hints */}
+                {(!isAllowed("analytics") || !isAllowed("export")) && (
                     <div className="mb-8">
                         <div className="flex items-center justify-between mb-4">
                             <div>
@@ -425,7 +418,7 @@ export default function DashboardPage() {
                                 View plans →
                             </Link>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {!isAllowed("analytics") && (
                                 <LockedFeatureCard
                                     feature="analytics"
@@ -439,14 +432,6 @@ export default function DashboardPage() {
                                     feature="export"
                                     icon={<Download className="h-4 w-4" />}
                                     description="Export your boards and tasks to CSV"
-                                    onUnlock={setLockedFeature}
-                                />
-                            )}
-                            {!isAllowed("aiFeatures") && (
-                                <LockedFeatureCard
-                                    feature="aiFeatures"
-                                    icon={<Bot className="h-4 w-4" />}
-                                    description="AI-powered task suggestions and summaries"
                                     onUnlock={setLockedFeature}
                                 />
                             )}
@@ -529,32 +514,23 @@ export default function DashboardPage() {
                 <DialogContent className="w-[95vw] max-w-md mx-auto text-center">
                     <DialogHeader>
                         <div className="flex justify-center mb-3">
-                            <div className={`h-12 w-12 rounded-full flex items-center justify-center ${plan === "pro" ? "bg-purple-100" : "bg-yellow-100"}`}>
-                                {plan === "pro"
-                                    ? <span className="text-2xl">🏢</span>
-                                    : <Zap className="h-6 w-6 text-yellow-500" />
-                                }
+                            <div className="h-12 w-12 rounded-full flex items-center justify-center bg-yellow-100">
+                                <Zap className="h-6 w-6 text-yellow-500" />
                             </div>
                         </div>
                         <DialogTitle className="text-xl">
-                            {plan === "pro" ? "Upgrade to Enterprise" : "Upgrade your plan"}
+                            Upgrade to Pro
                         </DialogTitle>
                         <p className="text-sm text-gray-600 mt-1">
-                            {plan === "pro"
-                                ? "You've reached your Pro limit of 20 boards."
-                                : <>You've reached your Free plan limit of <strong>{limit} boards</strong>.</>
-                            }
+                            You&apos;ve reached your Free plan limit of <strong>{limit} boards</strong>.
                         </p>
                         <p className="text-sm text-gray-500 mt-1">
-                            {plan === "pro"
-                                ? "Upgrade to Enterprise for unlimited boards, custom integrations, and dedicated support."
-                                : "Upgrade to Pro or Enterprise for more boards, team features, and advanced tools."
-                            }
+                            Upgrade to Pro for unlimited boards, analytics, CSV export, and more.
                         </p>
                     </DialogHeader>
                     <div className="flex flex-col gap-2 mt-4">
                         <Link href="/pricing">
-                            <Button className={`w-full font-semibold text-white ${plan === "pro" ? "bg-purple-600 hover:bg-purple-500" : "bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600"}`}>
+                            <Button className="w-full font-semibold text-white bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600">
                                 <Zap className="h-4 w-4 mr-2" />
                                 View Plans
                             </Button>
