@@ -48,7 +48,20 @@ export function useBoards() {
     }
   }
 
-  return { boards, loading, error, createBoard };
+  async function updateBoard(boardId: string, updates: Partial<Board>) {
+    if (!supabase) throw new Error("Not authenticated");
+    const updated = await boardService.updateBoard(supabase, boardId, updates);
+    setBoards((prev) => prev.map((b) => (b.id === boardId ? updated : b)));
+    return updated;
+  }
+
+  async function deleteBoard(boardId: string) {
+    if (!supabase) throw new Error("Not authenticated");
+    await boardService.deleteBoard(supabase, boardId);
+    setBoards((prev) => prev.filter((b) => b.id !== boardId));
+  }
+
+  return { boards, loading, error, createBoard, updateBoard, deleteBoard };
 }
 
 export function useBoard(boardId: string) {
@@ -133,6 +146,22 @@ export function useBoard(boardId: string) {
     }
   }
 
+  async function updateTask(taskId: string, data: Partial<Task>) {
+    if (!supabase) return;
+    return await taskService.updateTask(supabase, taskId, data);
+  }
+
+  async function deleteTask(taskId: string) {
+    if (!supabase) return;
+    await taskService.deleteTask(supabase, taskId);
+    setColumns((prev) =>
+      prev.map((col) => ({
+        ...col,
+        tasks: col.tasks.filter((t) => t.id !== taskId),
+      }))
+    );
+  }
+
   async function createColumn(title: string) {
     if (!supabase || !board) throw new Error("Board not ready");
     const newColumn = await columnService.createColumn(supabase, {
@@ -163,6 +192,8 @@ export function useBoard(boardId: string) {
     reloadBoard: loadBoard,
     createRealTask,
     moveTask,
+    updateTask,
+    deleteTask,
     createColumn,
     updateColumnTitle,
   };

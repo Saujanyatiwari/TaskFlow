@@ -8,13 +8,13 @@ import { Label } from "@/components/ui/label";
 import { useBoard } from "@/lib/hooks/useBoards";
 import { useParams } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
-import { DialogTrigger } from "@radix-ui/react-dialog";
 import { Download, MoreHorizontal, Plus, Search, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ColumnWithTasks } from "@/lib/supabase/models";
+import { ColumnWithTasks, Task } from "@/lib/supabase/models";
 import { TaskCard, SortableTaskCard } from "@/components/kanban/TaskCard";
+import { TaskEditModal } from "@/components/kanban/TaskEditModal";
 import { useFeatureAccess } from "@/lib/hooks/useFeatureAccess";
 import { FeatureName } from "@/lib/config/featureMatrix";
 import { LockedButton, FeatureUpgradeModal } from "@/components/feature-gate";
@@ -38,7 +38,13 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 
-
+type TaskFormData = {
+  title: string;
+  description?: string;
+  assignee?: string;
+  dueDate?: string;
+  priority: "low" | "medium" | "high";
+};
 
 function Column({
   column,
@@ -50,7 +56,7 @@ function Column({
   column: ColumnWithTasks;
   children: React.ReactNode;
   taskIds: string[];
-  onCreateTask: (columnId: string, taskData: any) => Promise<void>;
+  onCreateTask: (columnId: string, taskData: TaskFormData) => Promise<void>;
   onEditColumn: (column: ColumnWithTasks) => void;
 }) {
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
@@ -78,7 +84,7 @@ function Column({
               className="shrink-0"
               onClick={() => onEditColumn(column)}
             >
-              <MoreHorizontal />
+              <MoreHorizontal className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -102,7 +108,7 @@ function Column({
                 <Plus />
                 Add Task
               </Button>
-            <DialogContent className="w-[95vw] max-w-106.25 mx-auto">
+            <DialogContent className="w-[95vw] max-w-[425px] mx-auto">
               <DialogHeader>
                 <DialogTitle>Create New Task</DialogTitle>
                 <p className="text-sm text-gray-600">Add a task to the board</p>
@@ -141,6 +147,7 @@ function Column({
                     id="title"
                     name="title"
                     placeholder="Enter task title"
+                    required
                   />
                 </div>
                 <div className="space-y-2">
@@ -199,14 +206,10 @@ function Column({
 
 export default function BoardPage(){
     const { id } = useParams<{id:string}>();
-    const { board, updateBoard, columns, loading, error, createRealTask, moveTask, reloadBoard, createColumn, updateColumnTitle } = useBoard(id);
+    const { board, columns, loading, error, createRealTask, moveTask, reloadBoard, createColumn, updateColumnTitle, updateTask, deleteTask } = useBoard(id);
 
     const [localColumns, setLocalColumns] = useState(columns);
     const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-
-    const [isEditingTitle , setIsEditingTitle] = useState(false);
-    const [newTitle , setNewTitle] = useState("");
-    const [newColor , setNewColor] = useState("");
 
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [isAddColumnOpen, setIsAddColumnOpen] = useState(false);
@@ -214,6 +217,11 @@ export default function BoardPage(){
     const [editingColumn, setEditingColumn] = useState<ColumnWithTasks | null>(null);
     const [editColumnTitle, setEditColumnTitle] = useState("");
     const [lockedFeature, setLockedFeature] = useState<FeatureName | null>(null);
+
+    const [editingTask, setEditingTask] = useState<Task | null>(null);
+    const [isToolbarAddTaskOpen, setIsToolbarAddTaskOpen] = useState(false);
+    const [isToolbarSaving, setIsToolbarSaving] = useState(false);
+    const [toolbarPriority, setToolbarPriority] = useState<"low" | "medium" | "high">("medium");
 
     const { isAllowed } = useFeatureAccess();
 
@@ -341,124 +349,53 @@ export default function BoardPage(){
       );
     }
 
-    async function handleUpdateBoard(e: React.FormEvent) {
-    e.preventDefault();
+    async function handleCreateColumn(e: React.FormEvent) {
+      e.preventDefault();
+      if (!newColumnTitle.trim()) return;
+      await createColumn(newColumnTitle.trim());
+      setNewColumnTitle("");
+      setIsAddColumnOpen(false);
+    }
 
-    if (!newTitle.trim() || !board) return;
+    async function handleUpdateColumnTitle(e: React.FormEvent) {
+      e.preventDefault();
+      if (!editingColumn || !editColumnTitle.trim()) return;
+      await updateColumnTitle(editingColumn.id, editColumnTitle.trim());
+      setEditingColumn(null);
+    }
 
-    try {
-        await updateBoard(board.id, {
-        title: newTitle.trim(),
-        color: newColor || board.color,
-        });
+    async function createTask(columnId: string, taskData: TaskFormData) {
+      await createRealTask(columnId, taskData);
+    }
 
-        setIsEditingTitle(false);
-        } catch {}
+    async function handleTaskSave(data: Partial<Task>) {
+      if (!editingTask) return;
+      const updated = await updateTask(editingTask.id, data);
+      if (updated) {
+        setLocalColumns(prev => prev.map(col => ({
+          ...col,
+          tasks: col.tasks.map(t => t.id === updated.id ? updated : t)
+        })));
       }
+      setEditingTask(null);
+    }
 
+    async function handleTaskDelete(taskId: string) {
+      await deleteTask(taskId);
+    }
 
-      async function handleCreateColumn(e: React.FormEvent) {
-        e.preventDefault();
-        if (!newColumnTitle.trim()) return;
-        await createColumn(newColumnTitle.trim());
-        setNewColumnTitle("");
-        setIsAddColumnOpen(false);
-      }
-
-      async function handleUpdateColumnTitle(e: React.FormEvent) {
-        e.preventDefault();
-        if (!editingColumn || !editColumnTitle.trim()) return;
-        await updateColumnTitle(editingColumn.id, editColumnTitle.trim());
-        setEditingColumn(null);
-      }
-
-      async function createTask(
-        columnId: string,
-        taskData: {
-          title: string;
-          description?: string;
-          assignee?: string;
-          dueDate?: string;
-          priority: "low" | "medium" | "high";
-        }
-      ) {
-        await createRealTask(columnId, taskData);
-      }
-
+    function openToolbarAddTask() {
+      setToolbarPriority("medium");
+      setIsToolbarAddTaskOpen(true);
+    }
 
     return (
         <div className="min-h-screen bg-gray-50">
-            <Navbar  boardTitle={board?.title}
-            onEditBoard={() => {
-                setNewTitle(board?.title ?? "");
-                setNewColor(board?.color ?? "");
-                setIsEditingTitle(true);
-            }}
-            onFilterClick={() => setIsFilterOpen(true)}
-            filterCount={activeFilterCount}
+            <Navbar
+              boardTitle={board?.title}
+              onFilterClick={() => setIsFilterOpen(true)}
+              filterCount={activeFilterCount}
             />
-
-           <Dialog open={isEditingTitle} onOpenChange={setIsEditingTitle}>
-          <DialogContent className="w-[95vw] max-w-106.25 mx-auto">
-            <DialogHeader>
-              <DialogTitle>Edit Board</DialogTitle>
-            </DialogHeader>
-            <form className="space-y-4" onSubmit={handleUpdateBoard}>
-              <div className="space-y-2">
-                <Label htmlFor="boardTitle">Board Title</Label>
-                <Input
-                  id="boardTitle"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Enter board title..."
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Board Color</Label>
-                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                  {[
-                    "bg-rose-400",
-                    "bg-orange-400",
-                    "bg-amber-400",
-                    "bg-yellow-400",
-                    "bg-lime-400",
-                    "bg-emerald-400",
-                    "bg-teal-400",
-                    "bg-sky-400",
-                    "bg-indigo-400",
-                    "bg-purple-400",
-                    "bg-fuchsia-400",
-                    "bg-pink-400"
-                    ].map((color, key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={`w-8 h-8 rounded-full ${color} ${
-                        color === newColor
-                          ? "ring-2 ring-offset-2 ring-gray-900"
-                          : ""
-                      } `}
-                      onClick={() => setNewColor(color)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsEditingTitle(false)}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit">Save Changes</Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
 
         <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
           <DialogContent className="w-[95vw] max-w-md mx-auto">
@@ -577,6 +514,79 @@ export default function BoardPage(){
           </DialogContent>
         </Dialog>
 
+        {/* Toolbar Add Task Dialog */}
+        <Dialog open={isToolbarAddTaskOpen} onOpenChange={setIsToolbarAddTaskOpen}>
+          <DialogContent className="w-[95vw] max-w-[425px] mx-auto">
+            <DialogHeader>
+              <DialogTitle>Create New Task</DialogTitle>
+              <p className="text-sm text-gray-600">Task will be added to the first column</p>
+            </DialogHeader>
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const colId = localColumns[0]?.id;
+                if (!colId) return;
+                setIsToolbarSaving(true);
+                try {
+                  const formData = new FormData(e.currentTarget);
+                  await createRealTask(colId, {
+                    title: formData.get("title") as string,
+                    description: (formData.get("description") as string) || undefined,
+                    assignee: (formData.get("assignee") as string) || undefined,
+                    dueDate: (formData.get("dueDate") as string) || undefined,
+                    priority: toolbarPriority,
+                  });
+                  setToolbarPriority("medium");
+                  setIsToolbarAddTaskOpen(false);
+                } finally {
+                  setIsToolbarSaving(false);
+                }
+              }}
+            >
+              <div className="space-y-2">
+                <Label>Title *</Label>
+                <Input name="title" placeholder="Enter task title" required />
+              </div>
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea name="description" placeholder="Enter task description" rows={3} />
+              </div>
+              <div className="space-y-2">
+                <Label>Assignee</Label>
+                <Input name="assignee" placeholder="Person responsible for the task" />
+              </div>
+              <div className="space-y-2">
+                <Label>Priority</Label>
+                <Select value={toolbarPriority} onValueChange={(v) => setToolbarPriority(v as "low" | "medium" | "high")}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    {(["low", "medium", "high"] as const).map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p.charAt(0).toUpperCase() + p.slice(1)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Due Date</Label>
+                <Input type="date" name="dueDate" />
+              </div>
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => setIsToolbarAddTaskOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isToolbarSaving}>
+                  {isToolbarSaving ? "Saving..." : "Create Task"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         {/* Board Content */}
         <main className="container mx-auto px-2 sm:px-4 py-4 sm:py-6">
           {/* Search bar */}
@@ -649,80 +659,12 @@ export default function BoardPage(){
                 />
               )}
 
-            {/* Add task dialog */}
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button className="w-full sm:w-auto">
-                  <Plus />
-                  Add Task
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="w-[95vw] max-w-106.25 mx-auto">
-                <DialogHeader>
-                  <DialogTitle>Create New Task</DialogTitle>
-                  <p className="text-sm text-gray-600">
-                    Add a task to the board
-                  </p>
-                </DialogHeader>
-
-                <form className="space-y-4" onSubmit={(e) => {
-                   e.preventDefault();
-                   }}>
-                  <div className="space-y-2">
-                    <Label>Title *</Label>
-                    <Input
-                      id="title"
-                      name="title"
-                      placeholder="Enter task title"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Description</Label>
-                    <Textarea
-                      id="description"
-                      name="description"
-                      placeholder="Enter task description"
-                      rows={3}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Assignee</Label>
-                    <Input
-                      id="assignee"
-                      name="assignee"
-                      placeholder="Person responsible for the task"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Priority</Label>
-                    <Select name="priority" defaultValue="medium">
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {["low", "medium", "high"].map((priority, key) => (
-                          <SelectItem key={key} value={priority}>
-                            {priority.charAt(0).toUpperCase() +
-                              priority.slice(1)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Due Date</Label>
-                    <Input type="date" id="dueDate" name="dueDate" />
-                  </div>
-
-                  <div className="flex justify-end space-x-2 pt-4">
-                    <Button type="submit">Create Task</Button>
-                  </div>
-                </form>
-              </DialogContent>
-            </Dialog>
-            </div>{/* end toolbar flex */}
+              {/* Toolbar Add Task button */}
+              <Button className="w-full sm:w-auto" onClick={openToolbarAddTask}>
+                <Plus />
+                Add Task
+              </Button>
+            </div>
           </div>
 
           {/* Board Columns */}
@@ -755,7 +697,12 @@ export default function BoardPage(){
                       <p className="text-xs text-gray-400 text-center py-6">No tasks found</p>
                     ) : (
                       column.tasks.map((task) => (
-                        <SortableTaskCard key={task.id} task={task} />
+                        <SortableTaskCard
+                          key={task.id}
+                          task={task}
+                          onEdit={setEditingTask}
+                          onDelete={handleTaskDelete}
+                        />
                       ))
                     )}
                   </div>
@@ -778,6 +725,13 @@ export default function BoardPage(){
             </DragOverlay>
           </DndContext>
           </main>
+
+          <TaskEditModal
+            task={editingTask}
+            open={!!editingTask}
+            onClose={() => setEditingTask(null)}
+            onSave={handleTaskSave}
+          />
 
           <FeatureUpgradeModal feature={lockedFeature} onClose={() => setLockedFeature(null)} />
         </div>

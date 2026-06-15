@@ -3,20 +3,17 @@
 import { SignInButton, SignUpButton, UserButton, useUser } from "@clerk/nextjs";
 import { Button } from "./ui/button";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Filter, LayoutDashboard, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, ArrowRight, Filter, LayoutDashboard } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { Badge } from "./ui/badge";
-// import {TaskFlow} from "lucide-react";
 
 interface Props {
-boardTitle?: string;
-onEditBoard?: () => void;
-onFilterClick?: () => void;
-filterCount?: number;
-
+  boardTitle?: string;
+  onFilterClick?: () => void;
+  filterCount?: number;
 }
 
-export default function Navbar( {boardTitle , onEditBoard , onFilterClick , filterCount=0}: Props) {
+export default function Navbar({ boardTitle, onFilterClick, filterCount = 0 }: Props) {
 
     const {isSignedIn , user} = useUser();
     const pathname = usePathname();
@@ -82,15 +79,6 @@ export default function Navbar( {boardTitle , onEditBoard , onFilterClick , filt
                                 <LayoutDashboard className="text-blue-600"/>
                                 <div className="text-lg items-center space-x-1 sm:space-x-2 min-w-0">
                                 <span className="text-lg font-bold text-gray-900 truncate">{boardTitle}</span>
-                                {onEditBoard && (
-                                    <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    className="h-7 w-7 shrink-0 p-0"
-                                    onClick={onEditBoard}>
-                                        <MoreHorizontal />
-                                    </Button>
-                                )}
                                 </div>
                             </div>
                         </div>

@@ -47,6 +47,11 @@ export const boardService = {
     if (error) throw error;
     return data;
   },
+
+  async deleteBoard(supabase: SupabaseClient, id: string): Promise<void> {
+    const { error } = await supabase.from("boards").delete().eq("id", id);
+    if (error) throw error;
+  },
 };
 
 export const columnService = {
@@ -124,6 +129,22 @@ export const taskService = {
       .from("tasks")
       .update({ column_id: newColumnId, sort_order: newSortOrder })
       .eq("id", taskId);
+    if (error) throw error;
+  },
+
+  async updateTask(supabase: SupabaseClient, id: string, data: Partial<Task>): Promise<Task> {
+    const { data: task, error } = await supabase
+      .from("tasks")
+      .update(data)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return task;
+  },
+
+  async deleteTask(supabase: SupabaseClient, id: string): Promise<void> {
+    const { error } = await supabase.from("tasks").delete().eq("id", id);
     if (error) throw error;
   },
 };
