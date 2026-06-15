@@ -183,6 +183,12 @@ export function useBoard(boardId: string) {
     return updated;
   }
 
+  async function deleteColumn(columnId: string) {
+    if (!supabase) return;
+    await columnService.deleteColumn(supabase, columnId);
+    setColumns((prev) => prev.filter((col) => col.id !== columnId));
+  }
+
   return {
     board,
     columns,
@@ -196,5 +202,6 @@ export function useBoard(boardId: string) {
     deleteTask,
     createColumn,
     updateColumnTitle,
+    deleteColumn,
   };
 }

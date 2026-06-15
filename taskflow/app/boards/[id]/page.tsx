@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useBoard } from "@/lib/hooks/useBoards";
 import { useParams } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
-import { Download, MoreHorizontal, Plus, Search, X } from "lucide-react";
+import { Download, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -52,15 +52,18 @@ function Column({
   taskIds,
   onCreateTask,
   onEditColumn,
+  onDeleteColumn,
 }: {
   column: ColumnWithTasks;
   children: React.ReactNode;
   taskIds: string[];
   onCreateTask: (columnId: string, taskData: TaskFormData) => Promise<void>;
   onEditColumn: (column: ColumnWithTasks) => void;
+  onDeleteColumn: (column: ColumnWithTasks) => void;
 }) {
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   return (
@@ -78,14 +81,34 @@ function Column({
                 {column.tasks.length}
               </Badge>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="shrink-0"
-              onClick={() => onEditColumn(column)}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
+            <div className="relative shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsMenuOpen((open) => !open)}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+              {isMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} />
+                  <div className="absolute right-0 top-8 z-50 bg-white rounded-lg shadow-lg border py-1 min-w-[160px]">
+                    <button
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+                      onClick={() => { setIsMenuOpen(false); onEditColumn(column); }}
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-gray-500" /> Rename column
+                    </button>
+                    <button
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-red-50 flex items-center gap-2 text-red-600"
+                      onClick={() => { setIsMenuOpen(false); onDeleteColumn(column); }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Delete column
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -206,7 +229,7 @@ function Column({
 
 export default function BoardPage(){
     const { id } = useParams<{id:string}>();
-    const { board, columns, loading, error, createRealTask, moveTask, reloadBoard, createColumn, updateColumnTitle, updateTask, deleteTask } = useBoard(id);
+    const { board, columns, loading, error, createRealTask, moveTask, reloadBoard, createColumn, updateColumnTitle, deleteColumn, updateTask, deleteTask } = useBoard(id);
 
     const [localColumns, setLocalColumns] = useState(columns);
     const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -216,6 +239,8 @@ export default function BoardPage(){
     const [newColumnTitle, setNewColumnTitle] = useState("");
     const [editingColumn, setEditingColumn] = useState<ColumnWithTasks | null>(null);
     const [editColumnTitle, setEditColumnTitle] = useState("");
+    const [deletingColumn, setDeletingColumn] = useState<ColumnWithTasks | null>(null);
+    const [isColumnDeleting, setIsColumnDeleting] = useState(false);
     const [lockedFeature, setLockedFeature] = useState<FeatureName | null>(null);
 
     const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -364,6 +389,17 @@ export default function BoardPage(){
       setEditingColumn(null);
     }
 
+    async function handleDeleteColumn() {
+      if (!deletingColumn) return;
+      setIsColumnDeleting(true);
+      try {
+        await deleteColumn(deletingColumn.id);
+        setDeletingColumn(null);
+      } finally {
+        setIsColumnDeleting(false);
+      }
+    }
+
     async function createTask(columnId: string, taskData: TaskFormData) {
       await createRealTask(columnId, taskData);
     }
@@ -483,6 +519,36 @@ export default function BoardPage(){
                 <Button type="submit">Save</Button>
               </div>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Column Dialog */}
+        <Dialog open={!!deletingColumn} onOpenChange={(open) => { if (!open) setDeletingColumn(null); }}>
+          <DialogContent className="w-[95vw] max-w-sm mx-auto text-center">
+            <DialogHeader>
+              <div className="flex justify-center mb-3">
+                <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">
+                  <Trash2 className="h-6 w-6 text-red-500" />
+                </div>
+              </div>
+              <DialogTitle>Delete this column?</DialogTitle>
+              <p className="text-sm text-gray-600 mt-1">
+                All tasks inside it will also be deleted. This cannot be undone.
+              </p>
+            </DialogHeader>
+            <div className="flex flex-col gap-2 mt-4">
+              <Button
+                variant="destructive"
+                className="w-full"
+                disabled={isColumnDeleting}
+                onClick={handleDeleteColumn}
+              >
+                {isColumnDeleting ? "Deleting..." : "Delete"}
+              </Button>
+              <Button variant="ghost" className="w-full" onClick={() => setDeletingColumn(null)}>
+                Cancel
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
 
@@ -691,6 +757,7 @@ export default function BoardPage(){
                     setEditingColumn(col);
                     setEditColumnTitle(col.title);
                   }}
+                  onDeleteColumn={(col) => setDeletingColumn(col)}
                 >
                   <div>
                     {column.tasks.length === 0 && activeFilterCount > 0 ? (

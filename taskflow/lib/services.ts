@@ -92,6 +92,11 @@ export const columnService = {
     if (error) throw error;
     return data;
   },
+
+  async deleteColumn(supabase: SupabaseClient, id: string): Promise<void> {
+    const { error } = await supabase.from("columns").delete().eq("id", id);
+    if (error) throw error;
+  },
 };
 
 export const taskService = {
