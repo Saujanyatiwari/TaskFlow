@@ -9,7 +9,7 @@ import { useUser, useClerk, UserButton } from "@clerk/nextjs";
 import {
     Activity, AlertTriangle, ArrowRight, ArrowUpDown, BarChart2, BarChart3,
     Calendar, CalendarDays, Check, CheckSquare, Download, Filter, Grid3X3,
-    Kanban, LayoutDashboard, LayoutGrid, List, Loader2, Lock, LogOut, Menu,
+    Kanban, LayoutDashboard, LayoutGrid, LayoutList, List, Loader2, Lock, LogOut, Menu,
     MoreHorizontal, Pencil, Plus, Rocket, Search, Settings, Sparkles, Trash2, X,
 } from "lucide-react";
 import Link from "next/link";
@@ -19,6 +19,8 @@ import { Dialog, DialogClose, DialogContent, DialogHeader, DialogOverlay, Dialog
 import { Dialog as RadixDialog } from "radix-ui";
 import { usePlanLimits } from "@/lib/hooks/usePlanLimits";
 import { useFeatureAccess } from "@/lib/hooks/useFeatureAccess";
+import { useAnalytics } from "@/lib/hooks/useAnalytics";
+import { Skeleton } from "@/components/ui/skeleton";
 import { FeatureName } from "@/lib/config/featureMatrix";
 import { LockedFeatureCard, FeatureUpgradeModal } from "@/components/feature-gate";
 import { Board } from "@/lib/supabase/models";
@@ -49,8 +51,10 @@ export default function DashboardPage() {
     // ── sidebar state ──
     const [sidebarWidth, setSidebarWidth] = useState(280);
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [isCollapsed, setIsCollapsed] = useState(false);
     const [activeBoardId, setActiveBoardId] = useState<string | null>(null);
     const [activeNav, setActiveNav] = useState("Overview");
+    const [showAllBoards, setShowAllBoards] = useState(false);
 
     // ── main panel state ──
     const [taskSearchQuery, setTaskSearchQuery] = useState("");
@@ -63,8 +67,21 @@ export default function DashboardPage() {
 
     const { isAllowed } = useFeatureAccess();
     const { plan, limit, isAtLimit, isUnlimited } = usePlanLimits(boards.length);
+    const { analytics, loading: analyticsLoading } = useAnalytics();
 
-    // Sync activeBoardId to first board once boards load
+    // On mount: if a ?board= param was passed (e.g. from the tasks page sidebar),
+    // select that board and strip the param from the URL.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const boardParam = params.get("board");
+        if (boardParam) {
+            setActiveBoardId(boardParam);
+            setActiveNav("");
+            window.history.replaceState({}, "", "/dashboard");
+        }
+    }, []);
+
+    // Sync activeBoardId to first board once boards load (only when no board is set)
     useEffect(() => {
         if (activeBoardId === null && boards.length > 0) {
             setActiveBoardId(boards[0].id);
@@ -224,12 +241,18 @@ export default function DashboardPage() {
         );
     }
 
-    // ── sidebar inner (untouched) ──
     const sidebarInner = (
         <>
-            {/* Logo row */}
-            <div className="px-5 pt-6 pb-6 flex items-center justify-between">
-                <span className="text-2xl font-semibold text-[#1A1816]">TaskFlow</span>
+            {/* Logo + toggle */}
+            <div className={`flex items-center px-5 pt-6 pb-6 ${isCollapsed ? "md:justify-center md:px-0" : "justify-between"}`}>
+                <span className={`text-2xl font-semibold text-[#1A1816] ${isCollapsed ? "md:hidden" : ""}`}>TaskFlow</span>
+                <button
+                    onClick={() => setIsCollapsed(!isCollapsed)}
+                    aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                    className="hidden md:flex items-center justify-center w-8 h-8 rounded-md text-[#7A7872] hover:text-[#1A1816] hover:bg-[#F0EBE2] transition-colors shrink-0"
+                >
+                    <Menu className="h-5 w-5" />
+                </button>
                 {sidebarOpen && (
                     <button
                         onClick={() => setSidebarOpen(false)}
@@ -246,112 +269,124 @@ export default function DashboardPage() {
                 {navItems.map(({ id, icon: Icon, label, locked }) => (
                     <button
                         key={id}
+                        title={isCollapsed ? label : undefined}
                         onClick={() => {
-                            if (locked) { setShowUpgradeModal(true); return; }
+                            if (locked) { setLockedFeature("analytics"); return; }
+                            if (id === "Tasks") { router.push("/dashboard/tasks"); return; }
+                            if (id === "Analytics") { router.push("/dashboard/analytics"); return; }
+                            if (id === "Settings") { router.push("/dashboard/settings"); return; }
                             setActiveNav(id);
                         }}
-                        className={`flex items-center gap-3 px-5 py-2.5 text-lg w-full transition-colors ${
-                            activeNav === id
-                                ? "font-medium text-[#1A1816]"
-                                : "text-[#7A7872] hover:text-[#1A1816]"
-                        }`}
+                        className={`flex items-center w-full transition-colors text-lg
+                            ${isCollapsed ? "gap-3 px-5 py-2.5 md:justify-center md:py-3 md:px-0 md:gap-0" : "gap-3 px-5 py-2.5"}
+                            ${activeNav === id ? "font-medium text-[#1A1816]" : "text-[#7A7872] hover:text-[#1A1816]"}`}
                     >
                         <Icon className="h-4 w-4 shrink-0" />
-                        <span className="flex-1 text-left">{label}</span>
-                        {locked && <Lock className="h-3 w-3 text-[#B0ADA6]" />}
+                        <span className={`flex-1 text-left ${isCollapsed ? "md:hidden" : ""}`}>{label}</span>
+                        {locked && <Lock className={`h-3 w-3 text-[#B0ADA6] ${isCollapsed ? "md:hidden" : ""}`} />}
                     </button>
                 ))}
             </nav>
 
-            {/* Boards section label */}
-            <div className="px-5 pt-5 pb-2 text-md font-bold tracking-normal uppercase text-[#B0ADA6]">
+            {/* Boards label */}
+            <div className={`px-5 pt-5 pb-2 text-md font-bold tracking-normal uppercase text-[#B0ADA6] ${isCollapsed ? "md:hidden" : ""}`}>
                 Boards
             </div>
 
             {/* Board list — scrollable */}
             <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
-                {boards.map((board, idx) => {
-                    const isActive = activeBoardId ? activeBoardId === board.id : idx === 0;
-                    return (
-                        <button
-                            key={board.id}
-                            onClick={() => setActiveBoardId(board.id)}
-                            className={`flex items-center py-2 w-full mx-0 transition-colors ${
-                                isActive ? "bg-[#F5F0E8]" : ""
-                            }`}
-                        >
-                            <div className={`flex items-center gap-3 px-5 w-full text-base ${
-                                isActive
-                                    ? "font-medium text-[#1A1816]"
-                                    : "text-[#7A7872] hover:text-[#1A1816]"
-                            }`}>
-                                <span className={`w-2 h-2 rounded-full shrink-0 ${board.color}`} />
-                                <span className="truncate text-left">{board.title}</span>
-                            </div>
-                        </button>
-                    );
-                })}
-
-                <button
-                    onClick={handleCreateBoard}
-                    className="flex items-center gap-2 px-5 py-2 text-base font-semibold text-[#7F77DD] hover:text-[#6960C4] transition-colors w-full"
-                >
-                    <Plus className="h-3.5 w-3.5 shrink-0" />
-                    <span>New board</span>
-                </button>
+                <div className={isCollapsed ? "md:hidden" : ""}>
+                    {boards.map((board, idx) => {
+                        const isActive = activeBoardId ? activeBoardId === board.id : idx === 0;
+                        return (
+                            <button
+                                key={board.id}
+                                onClick={() => { setActiveBoardId(board.id); setActiveNav(""); setSidebarOpen(false); }}
+                                className={`flex items-center py-2 w-full mx-0 transition-colors ${
+                                    isActive && activeNav !== "Overview" ? "bg-[#F5F0E8]" : ""
+                                }`}
+                            >
+                                <div className={`flex items-center gap-3 px-5 w-full text-base ${
+                                    isActive && activeNav !== "Overview"
+                                        ? "font-medium text-[#1A1816]"
+                                        : "text-[#7A7872] hover:text-[#1A1816]"
+                                }`}>
+                                    <span className={`w-2 h-2 rounded-full shrink-0 ${board.color}`} />
+                                    <span className="truncate text-left">{board.title}</span>
+                                </div>
+                            </button>
+                        );
+                    })}
+                    <button
+                        onClick={handleCreateBoard}
+                        className="flex items-center gap-2 px-5 py-2 text-base font-semibold text-[#7F77DD] hover:text-[#6960C4] transition-colors w-full"
+                    >
+                        <Plus className="h-3.5 w-3.5 shrink-0" />
+                        <span>New board</span>
+                    </button>
+                </div>
             </div>
 
-            {/* Log out — sits just above the boards count footer */}
+            {/* Log out */}
             <button
                 onClick={() => signOut({ redirectUrl: "/" })}
-                className="flex items-center gap-3 px-5 py-3 w-full text-sm text-[#7A7872] hover:text-[#1A1816] transition-colors border-t border-[#F0EBE2]"
+                className={`flex items-center w-full text-sm text-[#7A7872] hover:text-[#1A1816] transition-colors border-t border-[#F0EBE2]
+                    ${isCollapsed ? "gap-3 px-5 py-3 md:justify-center md:px-0 md:gap-0" : "gap-3 px-5 py-3"}`}
             >
                 <LogOut className="h-4 w-4 shrink-0" />
-                <span>Log out</span>
+                <span className={isCollapsed ? "md:hidden" : ""}>Log out</span>
             </button>
 
-            {/* Footer — pinned */}
-            <div className="border-t border-[#F0EBE2] px-5 pt-4 pb-5">
-                {plan === "free" ? (
-                    <>
-                        <div className="mb-3">
-                            <div className="flex justify-between text-xs text-[#7A7872] mb-1.5">
-                                <span>Boards</span>
-                                <span>{boards.length}/{isUnlimited ? "∞" : limit}</span>
-                            </div>
-                            <div className="h-1.5 bg-[#F0EBE2] rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-[#7F77DD] rounded-full transition-all duration-300"
-                                    style={{
-                                        width: `${isUnlimited ? 0 : Math.min(100, (boards.length / (limit as number)) * 100)}%`,
-                                    }}
-                                />
-                            </div>
-                        </div>
-                        <Button
-                            size="sm"
-                            onClick={() => setShowUpgradeModal(true)}
-                            className="w-full bg-[#7F77DD] hover:bg-[#6960C4] text-white text-sm font-medium"
-                        >
-                            Upgrade to Pro
-                        </Button>
-                    </>
-                ) : (
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#7F77DD] text-white flex items-center justify-center text-sm font-medium shrink-0">
-                            {initials}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-[#1A1816] truncate leading-tight">
-                                {user?.fullName ?? user?.emailAddresses[0]?.emailAddress}
-                            </p>
-                            <span className="inline-flex items-center text-[10px] font-semibold bg-[#E8E6FC] text-[#4A46A8] px-2 py-0.5 rounded-full mt-0.5">
-                                Pro plan
-                            </span>
-                        </div>
+            {/* Footer */}
+            <div className={`border-t border-[#F0EBE2] ${isCollapsed ? "md:py-4" : "px-5 pt-4 pb-5"}`}>
+                <div className={`justify-center ${isCollapsed ? "hidden md:flex" : "hidden"}`}>
+                    <div className="w-8 h-8 rounded-full bg-[#7F77DD] text-white flex items-center justify-center text-sm font-medium shrink-0">
+                        {initials}
                     </div>
-                )}
+                </div>
+                <div className={isCollapsed ? "md:hidden px-5 pt-4 pb-5" : ""}>
+                    {plan === "free" ? (
+                        <>
+                            <div className="mb-3">
+                                <div className="flex justify-between text-xs text-[#7A7872] mb-1.5">
+                                    <span>Boards</span>
+                                    <span>{boards.length}/{isUnlimited ? "∞" : limit}</span>
+                                </div>
+                                <div className="h-1.5 bg-[#F0EBE2] rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-[#7F77DD] rounded-full transition-all duration-300"
+                                        style={{
+                                            width: `${isUnlimited ? 0 : Math.min(100, (boards.length / (limit as number)) * 100)}%`,
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                            <Button
+                                size="sm"
+                                onClick={() => setShowUpgradeModal(true)}
+                                className="w-full bg-[#7F77DD] hover:bg-[#6960C4] text-white text-sm font-medium"
+                            >
+                                Upgrade to Pro
+                            </Button>
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-[#7F77DD] text-white flex items-center justify-center text-sm font-medium shrink-0">
+                                {initials}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-[#1A1816] truncate leading-tight">
+                                    {user?.fullName ?? user?.emailAddresses[0]?.emailAddress}
+                                </p>
+                                <span className="inline-flex items-center text-[10px] font-semibold bg-[#E8E6FC] text-[#4A46A8] px-2 py-0.5 rounded-full mt-0.5">
+                                    Pro plan
+                                </span>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
+
         </>
     );
 
@@ -374,15 +409,17 @@ export default function DashboardPage() {
                         z-50 md:z-auto
                         shadow-xl md:shadow-none
                         md:flex-shrink-0
-                        transition-transform duration-200
+                        overflow-hidden
+                        transition-[width,transform] duration-200
+                        w-[280px] ${isCollapsed ? "md:w-16" : ""}
                         ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
-                    style={{ width: sidebarWidth }}
+                    style={isCollapsed ? undefined : { width: sidebarWidth }}
                 >
                     {sidebarInner}
 
                     {/* Resize drag handle */}
                     <div
-                        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hidden md:block hover:bg-[#E8E2D8] transition-colors"
+                        className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-[#E8E2D8] transition-colors ${isCollapsed ? "hidden" : "hidden md:block"}`}
                         onMouseDown={(e) => {
                             isResizingRef.current = true;
                             startXRef.current = e.clientX;
@@ -394,7 +431,217 @@ export default function DashboardPage() {
 
                 {/* ── Main content area ── */}
                 <div className="flex-1 overflow-y-auto bg-[#F5F0E8]">
+                    {activeNav === "Overview" ? (
+                        /* ── Overview panel ── */
+                        <div className="px-5 py-5 md:px-8 md:py-8">
+                            {/* 1. Page header */}
+                            <div className="flex items-start justify-between mb-6">
+                                <div className="flex items-start gap-3">
+                                    {/* Mobile hamburger inline with title */}
+                                    <button
+                                        onClick={() => setSidebarOpen(true)}
+                                        aria-label="Open sidebar"
+                                        className="md:hidden shrink-0 mt-1 min-h-[44px] min-w-[44px] flex items-start justify-start"
+                                    >
+                                        <Menu className="h-5 w-5 text-[#1A1816]" />
+                                    </button>
+                                    <div>
+                                        <h1 className="text-[18px] md:text-[22px] font-bold text-[#1A1A18] leading-tight">
+                                            {user?.firstName
+                                                ? `Welcome, ${user.firstName}`
+                                                : user?.fullName
+                                                ? `Welcome, ${user.fullName}`
+                                                : "Welcome back"}
+                                        </h1>
+                                        <p className="text-[14px] text-[#6B6B68] mt-1">Here&apos;s what&apos;s happening across all your boards</p>
+                                    </div>
+                                </div>
+                                <UserButton />
+                            </div>
 
+                            {/* 2. Stats cards */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                {analyticsLoading ? (
+                                    <>
+                                        <Skeleton className="h-[120px] rounded-2xl" />
+                                        <Skeleton className="h-[120px] rounded-2xl" />
+                                        <Skeleton className="h-[120px] rounded-2xl" />
+                                    </>
+                                ) : (
+                                    <>
+                                        {/* Card 1 — Total tasks */}
+                                        <div className="rounded-2xl p-6 bg-[#C8D5B9]">
+                                            <div className="w-9 h-9 rounded-[10px] bg-[#7A9E6E] flex items-center justify-center mb-3">
+                                                <LayoutList className="h-4 w-4 text-white" />
+                                            </div>
+                                            <div className="text-[13px] text-[#1A1A18] opacity-70 mb-1">Total tasks</div>
+                                            <div className="text-[28px] font-bold text-[#1A1A18] leading-none">
+                                                {analytics?.overview.totalTasks ?? 0}
+                                            </div>
+                                            <div className="text-[12px] text-[#1A1A18] opacity-50 mt-1">across all boards</div>
+                                        </div>
+
+                                        {/* Card 2 — High priority */}
+                                        <div className="rounded-2xl p-6 bg-[#C9A49A]">
+                                            <div className="w-9 h-9 rounded-[10px] bg-[#A0584A] flex items-center justify-center mb-3">
+                                                <AlertTriangle className="h-4 w-4 text-white" />
+                                            </div>
+                                            <div className="text-[13px] text-[#1A1A18] opacity-70 mb-1">High priority</div>
+                                            <div className="text-[28px] font-bold text-[#1A1A18] leading-none">
+                                                {analytics?.priorityCounts.high ?? 0}
+                                            </div>
+                                            <div className="text-[12px] text-[#1A1A18] opacity-50 mt-1">tasks need attention</div>
+                                        </div>
+
+                                        {/* Card 3 — Due this week */}
+                                        <div className="rounded-2xl p-6 bg-[#A8A4C8]">
+                                            <div className="w-9 h-9 rounded-[10px] bg-[#6B65A8] flex items-center justify-center mb-3">
+                                                <CalendarDays className="h-4 w-4 text-white" />
+                                            </div>
+                                            <div className="text-[13px] text-[#1A1A18] opacity-70 mb-1">Due this week</div>
+                                            <div className="text-[28px] font-bold text-[#1A1A18] leading-none">
+                                                {analytics?.dueDates.dueThisWeek ?? 0}
+                                            </div>
+                                            <div className="text-[12px] text-[#1A1A18] opacity-50 mt-1">tasks due soon</div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* 3. Your boards grid */}
+                            <div className="mt-8">
+                                <div className="mb-3.5">
+                                    <span className="text-[16px] font-semibold text-[#1A1A18]">Your Boards</span>
+                                </div>
+
+                                {loading ? (
+                                    <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+                                        <Skeleton className="h-[120px] rounded-2xl" />
+                                        <Skeleton className="h-[120px] rounded-2xl" />
+                                        <Skeleton className="h-[120px] rounded-2xl" />
+                                    </div>
+                                ) : boards.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                                        <p className="text-[14px] font-medium text-[#1A1A18] mb-1">No boards yet</p>
+                                        <p className="text-[13px] text-[#6B6B68] mb-4">Create your first board to get started</p>
+                                        <button
+                                            onClick={handleCreateBoard}
+                                            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#7C5CFC] text-white text-[13px] font-medium hover:bg-[#5B3FD4] transition-colors min-h-[44px]"
+                                        >
+                                            <Plus className="h-3.5 w-3.5" />
+                                            New board
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+                                        {(showAllBoards ? boards : boards.slice(0, 6)).map((board) => (
+                                            <Link
+                                                key={board.id}
+                                                href={`/boards/${board.id}`}
+                                                className="block bg-white border border-[rgba(0,0,0,0.08)] rounded-2xl p-5 hover:bg-[#FAFAFA] transition-colors duration-150"
+                                            >
+                                                <div className="flex items-center gap-2 mb-1.5 min-w-0">
+                                                    <span className={`w-2 h-2 rounded-full shrink-0 ${board.color}`} />
+                                                    <span className="text-[14px] font-semibold text-[#1A1A18] truncate">{board.title}</span>
+                                                </div>
+                                                <p className="text-[12px] text-[#7C5CFC] font-medium mt-3.5">Open board →</p>
+                                            </Link>
+                                        ))}
+                                        {!showAllBoards && boards.length > 6 && (
+                                            <button
+                                                onClick={() => setShowAllBoards(true)}
+                                                className="flex items-center justify-center rounded-2xl border border-dashed border-[rgba(0,0,0,0.15)] p-5 text-[13px] text-[#6B6B68] hover:bg-[#FAFAFA] transition-colors duration-150 min-h-[100px] w-full"
+                                            >
+                                                + {boards.length - 6} more
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 4. Recent activity */}
+                            <div className="mt-8">
+                                <div className="mb-3.5">
+                                    <span className="text-[16px] font-semibold text-[#1A1A18]">Recent Activity</span>
+                                </div>
+
+                                <div className="bg-white border border-[rgba(0,0,0,0.08)] rounded-2xl overflow-hidden">
+                                    {analyticsLoading ? (
+                                        <div className="flex flex-col">
+                                            {[...Array(5)].map((_, i) => (
+                                                <div key={i} className="px-5 py-3.5 border-b border-[rgba(0,0,0,0.05)] last:border-0">
+                                                    <Skeleton className="h-5 w-full" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : !analytics?.recentTasks.length ? (
+                                        <div className="flex items-center justify-center py-8 text-center px-5">
+                                            <p className="text-[13px] text-[#6B6B68]">
+                                                No tasks yet — add tasks to your boards to see activity here
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col">
+                                            {analytics.recentTasks.map((task, idx) => (
+                                                <div
+                                                    key={task.id}
+                                                    className={`flex items-center gap-3 px-5 py-3.5 ${
+                                                        idx < analytics.recentTasks.length - 1
+                                                            ? "border-b border-[rgba(0,0,0,0.05)]"
+                                                            : ""
+                                                    }`}
+                                                >
+                                                    {/* Priority badge */}
+                                                    <span
+                                                        className={`shrink-0 min-w-[56px] text-center text-[10px] font-semibold rounded-[6px] py-0.5 px-1.5 capitalize ${
+                                                            task.priority === "high"
+                                                                ? "bg-[#FEE2E2] text-[#991B1B]"
+                                                                : task.priority === "medium"
+                                                                ? "bg-[#FEF3C7] text-[#92400E]"
+                                                                : "bg-[#D1FAE5] text-[#065F46]"
+                                                        }`}
+                                                    >
+                                                        {task.priority}
+                                                    </span>
+
+                                                    {/* Task title */}
+                                                    <span className="flex-1 text-[14px] font-medium text-[#1A1A18] truncate overflow-hidden whitespace-nowrap">
+                                                        {task.title}
+                                                    </span>
+
+                                                    {/* Board chip — hidden below 480px */}
+                                                    <span className="hidden xs:inline-flex shrink-0 text-[11px] text-[#6B6B68] bg-[#F0EDE6] rounded-[6px] px-2 py-0.5 max-[480px]:hidden">
+                                                        {task.board_title}
+                                                    </span>
+
+                                                    {/* Date — hidden below 380px */}
+                                                    <span className="shrink-0 text-[12px] text-[#6B6B68] whitespace-nowrap max-[380px]:hidden">
+                                                        {new Date(task.created_at).toLocaleDateString("en-US", {
+                                                            month: "short",
+                                                            day: "numeric",
+                                                        })}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ) : activeNav === "Analytics" || activeNav === "Settings" ? (
+                        /* ── Placeholder for unbuilt pages ── */
+                        <div className="flex flex-col items-center justify-center h-full text-center px-8">
+                            <div className="w-14 h-14 rounded-2xl bg-[#EDE9FF] flex items-center justify-center mb-4">
+                                {activeNav === "Analytics"
+                                    ? <BarChart2 className="h-6 w-6 text-[#7C5CFC]" />
+                                    : <Settings className="h-6 w-6 text-[#7C5CFC]" />}
+                            </div>
+                            <h2 className="text-[18px] font-bold text-[#1A1A18] mb-2">{activeNav}</h2>
+                            <p className="text-[14px] text-[#6B6B68]">This page is coming soon.</p>
+                        </div>
+                    ) : (
+                        /* ── Board-selected view ── */
+                        <>
                     {/* Topbar */}
                     <div className="px-6 pt-6 pb-0 flex items-center gap-3 justify-between">
                         {/* Hamburger — left side on mobile only */}
@@ -414,8 +661,6 @@ export default function DashboardPage() {
                                 Overview of your selected board
                             </p>
                         </div>
-                        {/* Avatar — right side */}
-                        <UserButton />
                     </div>
 
                     {/* Toolbar */}
@@ -435,11 +680,7 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setSortOrder((o) => o === "asc" ? "desc" : "asc")}
-                                className={`flex items-center gap-1.5 px-3 py-2 rounded-[9px] text-[12px] border transition-colors duration-150 hover:bg-[#EDE9E0] hover:text-[#1A1816] active:bg-[#E4DFD8] ${
-                                    sortOrder !== "none"
-                                        ? "bg-[#EEEDFE] text-[#5A4A8B] border-[#C0B3E1]"
-                                        : "bg-[#EDE9E0] text-[#6B6860] border-transparent"
-                                }`}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-[9px] text-[12px] border transition-colors duration-150 hover:bg-[#EDE9E0] hover:text-[#1A1816] active:bg-[#E4DFD8] bg-[#EEEDFE] text-[#5A4A8B] border-[#C0B3E1]"
                             >
                                 <ArrowUpDown className="h-3.5 w-3.5" />
                                 <span className="hidden md:inline">{sortOrder === "asc" ? "Sort A→Z" : "Sort Z→A"}</span>
@@ -620,6 +861,8 @@ export default function DashboardPage() {
                             )}
                         </div>
                     </div>
+                        </>
+                    )}
                 </div>
             </div>
 

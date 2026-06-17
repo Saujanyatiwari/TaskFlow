@@ -6,7 +6,7 @@ import { useSupabase } from "@/lib/supabase/SupabaseProvider";
 import { Board, Column } from "@/lib/supabase/models";
 import { boardService } from "@/lib/services";
 
-type TaskRow = {
+export type TaskRow = {
   id: string;
   column_id: string;
   title: string;
@@ -26,6 +26,15 @@ export type ActivityItem = {
   created_at: string;
 };
 
+export type RecentTask = {
+  id: string;
+  title: string;
+  priority: "low" | "medium" | "high";
+  created_at: string;
+  board_id: string;
+  board_title: string;
+};
+
 export type AnalyticsData = {
   overview: {
     totalBoards: number;
@@ -42,6 +51,8 @@ export type AnalyticsData = {
     avgTasksPerBoard: number;
   };
   activity: ActivityItem[];
+  recentTasks: RecentTask[];
+  allTasks: TaskRow[];
 };
 
 export function useAnalytics() {
@@ -186,6 +197,16 @@ export function useAnalytics() {
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .slice(0, 20);
 
+    const boardMap = new Map(boards.map((b) => [b.id, b.title]));
+    const recentTasks: RecentTask[] = tasks.slice(0, 10).map((t) => ({
+      id: t.id,
+      title: t.title,
+      priority: t.priority,
+      created_at: t.created_at,
+      board_id: t.board_id,
+      board_title: boardMap.get(t.board_id) ?? "Unknown board",
+    }));
+
     return {
       overview: { totalBoards, totalTasks, completedTasks, completionRate },
       statusCounts,
@@ -193,6 +214,8 @@ export function useAnalytics() {
       dueDates: { overdue, dueThisWeek, upcoming },
       trends: { createdThisWeek, createdThisMonth, avgTasksPerBoard },
       activity,
+      recentTasks,
+      allTasks: tasks,
     };
   }, [boards, columns, tasks, loading]);
 

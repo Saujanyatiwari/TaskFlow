@@ -1,6 +1,5 @@
 "use client";
 
-import { UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Dialog as RadixDialog } from "radix-ui";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogOverlay, DialogPortal, DialogTitle } from "@/components/ui/dialog";
@@ -449,7 +448,6 @@ export default function BoardPage(){
                   <span className="text-[14px] font-semibold text-[#1A1816] truncate max-w-[160px]">{board?.title}</span>
                 </div>
               </div>
-              <UserButton />
             </div>
             {/* Toolbar — mobile (below md) */}
             <div className="md:hidden flex items-center justify-between px-3 py-2 bg-white border-b border-[#EDE9E0] w-full">
