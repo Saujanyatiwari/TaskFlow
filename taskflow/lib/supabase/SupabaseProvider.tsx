@@ -33,7 +33,7 @@ export default function SupabaseProvider ({children} : {children: React.ReactNod
 
 
     return <Context.Provider value={{supabase , isLoaded}}>
-        {!isLoaded ? <div>Loading.....</div> : children}
+        {children}
         </Context.Provider>;
 };
 
