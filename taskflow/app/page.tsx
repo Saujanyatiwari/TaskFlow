@@ -192,7 +192,13 @@ function KanbanPreview() {
 }
 
 export default async function Home() {
-  const { userId } = await auth();
+  let userId: string | null = null;
+  try {
+    const result = await auth();
+    userId = result.userId;
+  } catch {
+    // auth() requires clerkMiddleware(); fall back to unauthenticated
+  }
   const isSignedIn = !!userId;
 
   return (
